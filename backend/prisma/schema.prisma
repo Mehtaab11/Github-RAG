@@ -1,0 +1,82 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // url      = env("DATABASE_URL")
+}
+
+// Track users interacting with the platform
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  name          String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  repositories  Repository[]
+  conversations Conversation[]
+}
+
+// Track the state of GitHub repositories being ingested
+model Repository {
+  id            String         @id @default(uuid())
+  githubUrl     String         @unique
+  name          String         // e.g., "facebook/react"
+  branch        String         @default("main")
+  status        RepoStatus     @default(PENDING) // Tracks the background worker status
+  
+  userId        String?        // Optional: if you want to tie repos to the user who added them
+  user          User?          @relation(fields: [userId], references: [id])
+
+  conversations Conversation[]
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+// A chat session linked to a specific repository
+model Conversation {
+  id            String         @id @default(uuid())
+  title         String         // e.g., "Understanding JWT Auth"
+  
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  repositoryId  String
+  repository    Repository     @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  messages      Message[]
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+// Individual chat messages within a conversation
+model Message {
+  id             String        @id @default(uuid())
+  role           Role          // 'USER' or 'ASSISTANT'
+  content        String        @db.Text
+  
+  // Storing file references returned by the LLM as a JSON array (e.g., ["src/auth.ts"])
+  sources        Json?         
+  
+  conversationId String
+  conversation   Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime      @default(now())
+}
+
+enum RepoStatus {
+  PENDING      // Added to queue
+  CLONING      // Downloading from GitHub
+  PROCESSING   // Chunking and creating embeddings
+  READY        // Available for chat
+  FAILED       // Something went wrong
+}
+
+enum Role {
+  USER
+  ASSISTANT
+}
