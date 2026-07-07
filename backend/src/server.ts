@@ -4,6 +4,7 @@ import cors from "cors";
 import http from "http";
 import dotenv from "dotenv";
 import { initQdrant } from "./config/qdrant";
+import { startRepoWorker } from "./workers/repoWorker";
 
 const app = express();
 
@@ -20,6 +21,8 @@ app.get("/health", (req, res) => {
 
 async function startServer() {
   await initQdrant();
+
+  startRepoWorker();
   app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
   });
