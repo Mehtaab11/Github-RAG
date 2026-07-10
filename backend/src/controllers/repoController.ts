@@ -48,7 +48,7 @@ export async function ingestRepository(req: Request, res: Response) {
     });
 
     const job = await repoIngestionQueue.add(`ingest-${repo.id}`, {
-      repository: repo.id,
+      repositoryId: repo.id,
       githubUrl: repo.githubUrl,
     });
 
