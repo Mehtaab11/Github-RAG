@@ -34,7 +34,7 @@ export async function ingestRepository(req: Request, res: Response) {
     if (repo) {
       return res.status(200).json({
         message:
-          "This repostiry is already present is already present and being analyzed",
+          "This repository is already present and being analyzed",
         repository: repo,
       });
     }
