@@ -7,6 +7,7 @@ import { initQdrant } from "./config/qdrant";
 import { startRepoWorker } from "./workers/repoWorker";
 import repoRoutes from "./routes/repoRoutes";
 import chatRoutes from "./routes/chatRoutes";
+import { initSocket } from "./config/socket";
 const app = express();
 
 const server = http.createServer(app);
@@ -26,8 +27,11 @@ app.get("/health", (req, res) => {
 async function startServer() {
   await initQdrant();
 
+  initSocket(server);
+
   startRepoWorker();
-  app.listen(PORT, () => {
+
+  server.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
   });
 }
