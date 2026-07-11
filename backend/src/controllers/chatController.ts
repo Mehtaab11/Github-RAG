@@ -26,7 +26,7 @@ export async function handleChatMessage(req: Request, res: Response) {
     });
 
     if (!conversation || !conversation?.repository) {
-      return res.status(401).json({
+      return res.status(404).json({
         error: "Repository / Conversation not found",
       });
     }
