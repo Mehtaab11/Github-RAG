@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import { initQdrant } from "./config/qdrant";
 import { startRepoWorker } from "./workers/repoWorker";
 import repoRoutes from "./routes/repoRoutes";
+import chatRoutes from "./routes/chatRoutes";
 const app = express();
 
 const server = http.createServer(app);
@@ -16,6 +17,7 @@ app.use(cors());
 app.use(express.json());
 
 app.use("/api/repositories", repoRoutes);
+app.use("/api/chat", chatRoutes);
 
 app.get("/health", (req, res) => {
   res.json({ status: "healthy", message: "Server is running " });
