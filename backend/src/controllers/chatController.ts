@@ -86,10 +86,10 @@ export async function handleChatMessage(req: Request, res: Response) {
       where: {
         conversationId,
       },
-
-      orderBy: { createdAt: "asc" },
+      orderBy: { createdAt: "desc" },
       take: 10,
     });
+    pastMessages.reverse();
 
     const conversationHistoryString = pastMessages
       .map((msg) => `${msg.role}: ${msg.content}`)
