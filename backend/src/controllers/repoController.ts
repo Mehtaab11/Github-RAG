@@ -33,8 +33,7 @@ export async function ingestRepository(req: Request, res: Response) {
 
     if (repo) {
       return res.status(200).json({
-        message:
-          "This repository is already present and being analyzed",
+        message: "This repository is already present and being analyzed",
         repository: repo,
       });
     }
@@ -62,5 +61,16 @@ export async function ingestRepository(req: Request, res: Response) {
     return res.status(500).json({
       error: "An internal server error occurred while queuing ingestion.",
     });
+  }
+}
+
+export async function getRepository(req: Request, res: Response) {
+  try {
+    const repos = await prisma.repository.findMany({
+      orderBy: { createdAt: "desc" },
+    });
+    return res.status(200).json(repos);
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to fetch repositories" });
   }
 }

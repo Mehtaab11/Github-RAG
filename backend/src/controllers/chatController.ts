@@ -97,103 +97,6 @@ export async function handleChatMessage(req: Request, res: Response) {
 
     console.log("DEBUG: Analysing repository and generating response");
 
-    //     const systemPrompt = `
-    // You are an expert software engineer, code reviewer, and technical mentor specializing in large-scale software systems, backend engineering, frontend development, DevOps, databases, cloud infrastructure, and modern programming languages.
-
-    // You are helping a developer understand and navigate the following GitHub repository.
-
-    // Repository:
-    // ${conversation.repository.name}
-
-    // ==================================================================
-    // REPOSITORY CONTEXT
-    // ==================================================================
-
-    // The following source code snippets were retrieved using semantic search because they are likely relevant to the user's question.
-
-    // ${contextBlocks}
-
-    // ==================================================================
-    // END OF REPOSITORY CONTEXT
-    // ==================================================================
-
-    // Conversation History:
-    // ${conversationHistoryString}
-
-    // ==================================================================
-    // USER QUESTION
-    // ==================================================================
-
-    // ${message}
-
-    // ==================================================================
-    // INSTRUCTIONS
-    // ==================================================================
-
-    // Your primary source of truth is the repository context provided above.
-
-    // When answering:
-
-    // • Base your reasoning entirely on the supplied repository context.
-    // • Never invent files, functions, classes, APIs, or implementation details.
-    // • If the context is incomplete, explicitly explain what information is missing instead of guessing.
-    // • If multiple snippets seem related, connect them into a coherent explanation.
-    // • Reference filenames, modules, classes, interfaces, functions, and methods whenever possible.
-    // • Infer relationships only when they are strongly supported by the provided context.
-
-    // If the question is about:
-
-    // • Architecture → Explain how components interact and how data flows through the system.
-    // • Features → Explain what the feature does, how it works internally, and where it is implemented.
-    // • Bugs → Identify the most likely cause based on the available code and explain your reasoning.
-    // • Performance → Mention potential bottlenecks, complexity, unnecessary work, and optimization opportunities.
-    // • Security → Mention any relevant security considerations present in the code.
-    // • Code → Explain the purpose, logic, and important implementation details instead of merely describing each line.
-
-    // When code snippets improve understanding:
-
-    // - Use fenced Markdown code blocks.
-    // - Include only the relevant portions.
-    // - Specify the correct language.
-    // - Explain why the snippet is important.
-
-    // ==================================================================
-    // RESPONSE FORMAT
-    // ==================================================================
-
-    // # Summary
-
-    // Provide a concise answer to the user's question.
-
-    // ## Explanation
-
-    // Provide a detailed explanation grounded in the repository context.
-
-    // ## Relevant Repository Components
-
-    // List the important files, modules, classes, or functions involved.
-
-    // ## Code References
-
-    // Include code snippets only when they improve understanding.
-
-    // ## Notes
-
-    // Mention assumptions, limitations, missing context, or possible improvements if applicable.
-
-    // ==================================================================
-    // IMPORTANT RULES
-    // ==================================================================
-
-    // - Never hallucinate repository details.
-    // - Never fabricate implementation.
-    // - Never claim certainty when the context is incomplete.
-    // - Prefer saying "I don't have enough repository context to determine this" over making assumptions.
-    // - Keep the answer technically precise, concise, and easy to read.
-    // - Produce valid Markdown suitable for direct rendering in a Markdown viewer.`;
-
-    // Prompt
-
     const systemPrompt = `You are RepoGPT, an expert AI software engineering assistant specializing in understanding, analyzing, debugging, and explaining GitHub repositories.
 
 You are helping a developer understand the following repository:
@@ -365,7 +268,7 @@ Guidelines:
       }),
     ]);
 
-    console.log("Complete")
+    console.log("Complete");
     return res.status(200).json({
       answer: assistantAnswer,
       sources: uniqueSources,
@@ -375,5 +278,57 @@ Guidelines:
     return res
       .status(500)
       .json({ error: "An internal exception occurred during RAG generation." });
+  }
+}
+
+export async function getChats(req: Request, res: Response) {
+  const { repositoryId } = req.params;
+
+  try {
+    // 1. Ensure a default user exists to satisfy the relational database constraint
+    let defaultUser = await prisma.user.findFirst();
+
+    // If you recently wiped the DB and no users exist, auto-generate a mock profile
+    if (!defaultUser) {
+      defaultUser = await prisma.user.create({
+        data: {
+          id: "u1111111-1111-1111-1111-111111111111",
+          email: "mehtab.dev@example.com",
+          name: "Mehtab",
+        },
+      });
+    }
+
+    // 2. Look up the existing conversation for this repository context
+    let conversation = await prisma.conversation.findFirst({
+      where: { repositoryId },
+      include: {
+        messages: { orderBy: { createdAt: "asc" } },
+      },
+    });
+
+    // 3. If it doesn't exist, create it while providing the required userId relation
+    if (!conversation) {
+      conversation = await prisma.conversation.create({
+        data: {
+          repositoryId: repositoryId,
+          userId: defaultUser.id, // 👈 Relational payload link added here!
+          title: "New Chat",
+        },
+        include: {
+          messages: true,
+        },
+      });
+    }
+
+    return res.status(200).json({
+      conversationId: conversation.id,
+      messages: conversation.messages || [],
+    });
+  } catch (error) {
+    console.error("Error in getChats workspace provisioning:", error);
+    return res
+      .status(500)
+      .json({ error: "Failed to initialize conversation space." });
   }
 }

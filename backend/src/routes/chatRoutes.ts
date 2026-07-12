@@ -1,7 +1,8 @@
 import { Router } from "express";
-import { handleChatMessage } from "../controllers/chatController";
+import { getChats, handleChatMessage } from "../controllers/chatController";
 const router = Router();
 
 router.post("/message", handleChatMessage);
+router.post("/conversation/:repositoryId", getChats);
 
 export default router;
