@@ -9,9 +9,16 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [isHydrated, setIsHydrated] = useState(false);
 
-  // 1. Wait for the component to mount so Zustand can safely read from localStorage
+  // 1. Wait for Zustand store hydration to finish
   useEffect(() => {
-    setIsHydrated(true);
+    if (useAuthStore.persist.hasHydrated()) {
+      setIsHydrated(true);
+    } else {
+      const unsub = useAuthStore.persist.onFinishHydration(() => {
+        setIsHydrated(true);
+      });
+      return () => unsub();
+    }
   }, []);
 
   // 2. Evaluate access permissions whenever auth state or path changes

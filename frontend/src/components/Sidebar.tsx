@@ -2,15 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../store/useAppStore';
-import { useAuthStore } from "../store/authStore";
+import api from '../utils/api';
 import { FolderCode, Plus, Loader2, AlertCircle, CheckCircle2, GitBranch } from 'lucide-react';
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
 export default function Sidebar() {
   const [githubUrl, setGithubUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const token = useAuthStore((state) => state.token);
 
   // Extract relevant states and setters from our Zustand slice
   const {
@@ -27,15 +24,8 @@ export default function Sidebar() {
   useEffect(() => {
     async function fetchRepos() {
       try {
-        const response = await fetch(`${BACKEND_URL}/api/repositories`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setRepositories(data);
-        }
+        const response = await api.get('/repositories');
+        setRepositories(response.data);
       } catch (err) {
         console.error('Failed to populate repository indexing list:', err);
       }
@@ -50,33 +40,21 @@ export default function Sidebar() {
 
     setIsSubmitting(true);
     try {
-      const response = await fetch(`${BACKEND_URL}/api/repositories/ingest`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ githubUrl }),
-      });
-      const data = await response.json();
+      const response = await api.post('/repositories/ingest', { githubUrl });
+      const targetRepo = response.data.repository;
 
-      if (response.ok) {
-        // If it's a completely new or existing repository item structure
-        const targetRepo = data.repository;
-
-        // Append to local state list if it doesn't exist
-        if (!repositories.some((r) => r.id === targetRepo.id)) {
-          setRepositories([...repositories, targetRepo]);
-        }
-
-        // Set as active repository to bind socket events immediately
-        setActiveRepoId(targetRepo.id);
-        setGithubUrl('');
-      } else {
-        alert(data.error || 'Failed to submit code ingestion payload.');
+      // Append to local state list if it doesn't exist
+      if (!repositories.some((r) => r.id === targetRepo.id)) {
+        setRepositories([...repositories, targetRepo]);
       }
-    } catch (err) {
+
+      // Set as active repository to bind socket events immediately
+      setActiveRepoId(targetRepo.id);
+      setGithubUrl('');
+    } catch (err: any) {
       console.error('Network transaction exception:', err);
+      const errMsg = err.response?.data?.error || 'Failed to submit code ingestion payload.';
+      alert(errMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -90,21 +68,9 @@ export default function Sidebar() {
 
     // Fetch or create an active chat session conversation for this repo selection
     try {
-      const response = await fetch(
-        `${BACKEND_URL}/api/chat/conversation/${repoId}`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-      if (response.ok) {
-        const data = await response.json();
-        setActiveConversationId(data.conversationId);
-        setMessages(data.messages || []);
-      }
+      const response = await api.post(`/chat/conversation/${repoId}`);
+      setActiveConversationId(response.data.conversationId);
+      setMessages(response.data.messages || []);
     } catch (err) {
       console.error('Failed to provision conversation link context:', err);
     }

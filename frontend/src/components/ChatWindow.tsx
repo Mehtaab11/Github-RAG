@@ -5,8 +5,7 @@ import { useAppStore } from '../store/useAppStore';
 import { Send, Bot, User, FileText, Loader2, Code2, Clipboard, Check } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+import api from '../utils/api';
 
 export default function ChatWindow() {
     const [inputMessage, setInputMessage] = useState('');
@@ -27,63 +26,6 @@ export default function ChatWindow() {
     }, [messages, isChatLoading]);
 
     // Dispatch the message payload to the backend RAG router
-    // const handleSendMessage = async (e: React.FormEvent) => {
-    //     e.preventDefault();
-    //     if (!inputMessage.trim() || !activeConversationId || isChatLoading) return;
-
-    //     const userPayloadMessage = inputMessage.trim();
-    //     setInputMessage('');
-    //     setChatLoading(true);
-
-    //     // 1. Instantly append the User's message to the client view for snappy responsiveness
-    //     addMessage({
-    //         id: crypto.randomUUID(),
-    //         role: 'USER',
-    //         content: userPayloadMessage,
-    //     });
-
-    //     try {
-    //         // 2. Query our Express API backend
-    //         const response = await fetch(`${BACKEND_URL}/api/chat/message`, {
-    //             method: 'POST',
-    //             headers: { 'Content-Type': 'application/json' },
-    //             body: JSON.stringify({
-    //                 conversationId: activeConversationId,
-    //                 message: userPayloadMessage,
-    //             }),
-    //         });
-
-    //         const data = await response.json();
-
-    //         if (response.ok) {
-    //             // 3. Append the AI response along with the source files extracted from Qdrant
-    //             addMessage({
-    //                 id: crypto.randomUUID(),
-    //                 role: 'ASSISTANT',
-    //                 content: data.answer,
-    //                 sources: data.sources,
-    //             });
-    //         } else {
-    //             addMessage({
-    //                 id: crypto.randomUUID(),
-    //                 role: 'ASSISTANT',
-    //                 content: `❌ Error: ${data.error || 'The system could not compile an answer.'}`,
-    //             });
-    //         }
-    //     } catch (err) {
-    //         console.error('Chat transaction network exception:', err);
-    //         addMessage({
-    //             id: crypto.randomUUID(),
-    //             role: 'ASSISTANT',
-    //             content: '❌ Fatal: Failed to communicate with the RAG server engine.',
-    //         });
-    //     } finally {
-    //         setChatLoading(false);
-    //     }
-    // };
-
-
-    // Dispatch the message payload to the backend RAG router
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!inputMessage.trim() || !activeConversationId || isChatLoading) return;
@@ -100,44 +42,26 @@ export default function ChatWindow() {
         });
 
         try {
-            // Pull the token dynamically from local storage before firing the request
-            const token = typeof window !== 'undefined' ? localStorage.getItem('repo_gpt_token') : null;
-
             // 2. Query our Express API backend with security headers appended
-            const response = await fetch(`${BACKEND_URL}/api/chat/message`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify({
-                    conversationId: activeConversationId,
-                    message: userPayloadMessage,
-                }),
+            const response = await api.post('/chat/message', {
+                conversationId: activeConversationId,
+                message: userPayloadMessage,
             });
-            const data = await response.json();
 
-            if (response.ok) {
-                // 3. Append the AI response along with the source files extracted from Qdrant
-                addMessage({
-                    id: crypto.randomUUID(),
-                    role: 'ASSISTANT',
-                    content: data.answer,
-                    sources: data.sources,
-                });
-            } else {
-                addMessage({
-                    id: crypto.randomUUID(),
-                    role: 'ASSISTANT',
-                    content: `❌ Error: ${data.error || 'The system could not compile an answer.'}`,
-                });
-            }
-        } catch (err) {
-            console.error('Chat transaction network exception:', err);
+            // 3. Append the AI response along with the source files extracted from Qdrant
             addMessage({
                 id: crypto.randomUUID(),
                 role: 'ASSISTANT',
-                content: '❌ Fatal: Failed to communicate with the RAG server engine.',
+                content: response.data.answer,
+                sources: response.data.sources,
+            });
+        } catch (err: any) {
+            console.error('Chat transaction network exception:', err);
+            const errMsg = err.response?.data?.error || 'The system could not compile an answer.';
+            addMessage({
+                id: crypto.randomUUID(),
+                role: 'ASSISTANT',
+                content: `❌ Error: ${errMsg}`,
             });
         } finally {
             setChatLoading(false);
