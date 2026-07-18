@@ -7,6 +7,7 @@ import { initQdrant } from "./config/qdrant";
 import { startRepoWorker } from "./workers/repoWorker";
 import repoRoutes from "./routes/repoRoutes";
 import chatRoutes from "./routes/chatRoutes";
+import authRoutes from "./routes/authRoutes";
 import { initSocket } from "./config/socket";
 const app = express();
 
@@ -19,6 +20,7 @@ app.use(express.json());
 
 app.use("/api/repositories", repoRoutes);
 app.use("/api/chat", chatRoutes);
+app.use("/api/auth", authRoutes);
 
 app.get("/health", (req, res) => {
   res.json({ status: "healthy", message: "Server is running " });

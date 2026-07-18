@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../store/useAppStore';
+import { useAuthStore } from "../store/authStore";
 import { FolderCode, Plus, Loader2, AlertCircle, CheckCircle2, GitBranch } from 'lucide-react';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
@@ -9,6 +10,7 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:500
 export default function Sidebar() {
   const [githubUrl, setGithubUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const token = useAuthStore((state) => state.token);
 
   // Extract relevant states and setters from our Zustand slice
   const {
@@ -25,7 +27,11 @@ export default function Sidebar() {
   useEffect(() => {
     async function fetchRepos() {
       try {
-        const response = await fetch(`${BACKEND_URL}/api/repositories`);
+        const response = await fetch(`${BACKEND_URL}/api/repositories`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
         if (response.ok) {
           const data = await response.json();
           setRepositories(data);
@@ -45,22 +51,24 @@ export default function Sidebar() {
     setIsSubmitting(true);
     try {
       const response = await fetch(`${BACKEND_URL}/api/repositories/ingest`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ githubUrl }),
       });
-
       const data = await response.json();
 
       if (response.ok) {
         // If it's a completely new or existing repository item structure
         const targetRepo = data.repository;
-        
+
         // Append to local state list if it doesn't exist
         if (!repositories.some((r) => r.id === targetRepo.id)) {
           setRepositories([...repositories, targetRepo]);
         }
-        
+
         // Set as active repository to bind socket events immediately
         setActiveRepoId(targetRepo.id);
         setGithubUrl('');
@@ -82,9 +90,16 @@ export default function Sidebar() {
 
     // Fetch or create an active chat session conversation for this repo selection
     try {
-      const response = await fetch(`${BACKEND_URL}/api/chat/conversation/${repoId}`, {
-        method: 'POST',
-      });
+      const response = await fetch(
+        `${BACKEND_URL}/api/chat/conversation/${repoId}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
       if (response.ok) {
         const data = await response.json();
         setActiveConversationId(data.conversationId);
@@ -168,9 +183,8 @@ export default function Sidebar() {
               <button
                 key={repo.id}
                 onClick={() => handleSelectRepository(repo.id)}
-                className={`w-full flex items-center justify-between p-3 rounded-md transition-colors text-left text-xs ${
-                  isActive ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 text-slate-300'
-                }`}
+                className={`w-full flex items-center justify-between p-3 rounded-md transition-colors text-left text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 text-slate-300'
+                  }`}
               >
                 <div className="flex items-center gap-2 truncate">
                   <GitBranch className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-500'}`} />
