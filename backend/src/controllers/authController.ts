@@ -3,8 +3,7 @@ import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { prisma } from "../config/db"; // Adjust to your prisma client path
-
-const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret_key";
+import { JWT_SECRET } from "../config/jwt";
 
 // 📝 USER REGISTRATION
 export const register = async (req: Request, res: Response) => {
@@ -37,9 +36,15 @@ export const register = async (req: Request, res: Response) => {
       },
     });
 
-    console.log("SIGN SECRET:", process.env.JWT_SECRET);
     // Generate user token session
     const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: "7d" });
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
 
     return res.status(201).json({
       token,
@@ -85,9 +90,15 @@ export const login = async (req: Request, res: Response) => {
     }
 
 
-    console.log("SIGN SECRET:", process.env.JWT_SECRET);
     // Establish a signed security token session
     const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: "7d" });
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
 
     return res.status(200).json({
       token,
@@ -99,4 +110,14 @@ export const login = async (req: Request, res: Response) => {
       .status(500)
       .json({ error: "Internal server error during session processing." });
   }
+};
+
+// 🚪 USER LOGOUT
+export const logout = async (req: Request, res: Response) => {
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+  });
+  return res.status(200).json({ message: "Successfully logged out" });
 };

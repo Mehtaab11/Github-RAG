@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import axios from "axios";
 
 interface User {
   id: string;
@@ -36,10 +37,18 @@ export const useAuthStore = create<AuthState>()(
           user: null,
           isAuthenticated: false,
         });
+        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+        axios.post(`${apiBaseUrl}/auth/logout`, {}, { withCredentials: true }).catch((err) => {
+          console.error("Failed to clear auth cookie:", err);
+        });
       },
     }),
     {
       name: "repo_gpt_auth",
+      partialize: (state) => ({
+        user: state.user,
+        isAuthenticated: state.isAuthenticated,
+      }),
     }
   )
 );
