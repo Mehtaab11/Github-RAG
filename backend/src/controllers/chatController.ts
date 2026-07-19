@@ -4,11 +4,19 @@ import { ai } from "../config/gemini";
 import { qdrantClient, COLLECTION_NAME } from "../config/qdrant";
 import { prisma } from "../config/db";
 import { Prisma } from "@prisma/client";
+import { AuthRequest } from "../middleware/auth";
 
-export async function handleChatMessage(req: Request, res: Response) {
+export async function handleChatMessage(req: AuthRequest, res: Response) {
   try {
     console.log("DEBUG: Checking Input validation");
     const { conversationId, message } = req.body;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res
+        .status(401)
+        .json({ error: "Unauthorized: Missing user authentication session." });
+    }
 
     if (!conversationId || !message) {
       return res
@@ -16,23 +24,24 @@ export async function handleChatMessage(req: Request, res: Response) {
         .json({ error: "Conversation ID and message content are required." });
     }
 
-    const conversation = await prisma.conversation.findUnique({
+    // Secure Gatekeeping: Ensure the conversation exists AND belongs to this specific user
+    const conversation = await prisma.conversation.findFirst({
       where: {
         id: conversationId,
+        userId: userId, // 👈 Cross-tenant access protection
       },
       include: {
         repository: true,
       },
     });
 
-    if (!conversation || !conversation?.repository) {
+    if (!conversation || !conversation.repository) {
       return res.status(404).json({
-        error: "Repository / Conversation not found",
+        error: "Repository or Conversation workspace thread not found.",
       });
     }
 
     // Building the vector of the given message
-
     console.log("DEBUG: Building pipeline");
     const { pipeline } = await import("@xenova/transformers");
 
@@ -50,26 +59,20 @@ export async function handleChatMessage(req: Request, res: Response) {
     const queryVector = Array.from(output.data) as number[];
 
     // Search Qdrant for top code snippets matching the query vector within this repository
-
     console.log("DEBUG: Searching the qdrant");
+
+    // Fix: Explicitly ensure repositoryId is string evaluated
+    const targetRepoId = conversation.repositoryId as string;
 
     const searchResults = await qdrantClient.search(COLLECTION_NAME, {
       vector: queryVector,
       filter: {
-        must: [
-          { key: "repositoryId", match: { value: conversation.repositoryId } },
-        ],
+        must: [{ key: "repositoryId", match: { value: targetRepoId } }],
       },
-      limit: 5, // Retrieve top 5 most relevant code blocks
+      limit: 5,
     });
 
-    // console.log("🔍 DEBUG: Qdrant matches found:", searchResults.length, searchResults);
-    // Extract context code strings and unique file sources
-
-    // this extract the codeblock/content from vectors
-
     console.log("DEBUG: Preparing the code blocks and file path");
-
     const contextBlocks = searchResults
       .map((hit) => hit.payload?.content)
       .join("\n\n---\n\n");
@@ -77,25 +80,6 @@ export async function handleChatMessage(req: Request, res: Response) {
     const uniqueSources = Array.from(
       new Set(searchResults.map((hit) => hit.payload?.filePath)),
     ).filter(Boolean);
-
-    // loading the past messages for giving the chat context
-
-    console.log("DEBUG: Loading the previous message ");
-
-    const pastMessages = await prisma.message.findMany({
-      where: {
-        conversationId,
-      },
-      orderBy: { createdAt: "desc" },
-      take: 10,
-    });
-    pastMessages.reverse();
-
-    const conversationHistoryString = pastMessages
-      .map((msg) => `${msg.role}: ${msg.content}`)
-      .join("\n");
-
-    console.log("DEBUG: Analysing repository and generating response");
 
     const systemPrompt = `You are RepoGPT, an expert AI software engineering assistant specializing in understanding, analyzing, debugging, and explaining GitHub repositories.
 
@@ -116,10 +100,6 @@ ${contextBlocks}
 END OF REPOSITORY CONTEXT
 ======================================================================
 
-Conversation History:
-
-${conversationHistoryString}
-
 ======================================================================
 USER QUESTION
 ======================================================================
@@ -131,9 +111,7 @@ INSTRUCTIONS
 ======================================================================
 
 The repository context above is your primary source of truth.
-
 Use it to answer the user's question accurately.
-
 If the provided context does not contain enough information to answer confidently, explicitly state that you don't have enough repository context instead of guessing.
 
 Never invent:
@@ -145,11 +123,8 @@ Never invent:
 - project architecture
 
 When possible, reference relevant files, modules, classes, interfaces, functions, or methods.
-
 Connect information from multiple retrieved snippets whenever appropriate.
-
-Do not simply summarize the code.
-Explain what it does, why it exists, and how it relates to the user's question.
+Do not simply summarize the code. Explain what it does, why it exists, and how it relates to the user's question.
 
 ======================================================================
 RESPONSE STYLE
@@ -158,7 +133,6 @@ RESPONSE STYLE
 Adapt the depth and structure of your response to the user's question.
 
 For simple factual questions:
-
 - Answer directly.
 - Keep the response concise.
 - Avoid unnecessary headings.
@@ -166,32 +140,26 @@ For simple factual questions:
 - Mention relevant files only if they add value.
 
 For explanatory questions:
-
 - Explain the reasoning.
 - Reference important repository components.
 - Use headings only when they improve clarity.
 
 For debugging questions:
-
 - Explain the likely cause.
 - Explain your reasoning.
 - Suggest possible fixes.
 - Mention assumptions if context is incomplete.
 
 For architecture or design questions:
-
 Explain:
-
 - component responsibilities
 - execution flow
 - data flow
 - dependencies
 - trade-offs
-
 Use clear headings where appropriate.
 
 For code generation:
-
 Generate clean, production-quality code that follows the apparent coding style of the repository.
 
 ======================================================================
@@ -199,32 +167,13 @@ FORMATTING
 ======================================================================
 
 Produce clean Markdown.
-
-Use:
-
-- headings only when needed
-- bullet points when appropriate
-- numbered steps when explaining workflows
-- tables only if they genuinely improve readability
-- fenced code blocks with the correct language when including code
-
-Keep paragraphs short.
-
-Avoid repeating information.
-
-Avoid unnecessary introductions or conclusions.
-
+Use headings only when needed, bullet points when appropriate, and numbered steps when explaining workflows.
+Keep paragraphs short. Avoid repeating information. Avoid unnecessary introductions or conclusions.
 Match the amount of detail to the complexity of the user's question.
-
-A one-line question should usually receive a concise answer.
-
-A complex architectural question should receive a comprehensive explanation.
 
 ======================================================================
 FINAL RULES
 ======================================================================
-
-Your goals are:
 
 1. Be technically accurate.
 2. Stay grounded in the repository context.
@@ -239,12 +188,11 @@ Guidelines:
 - Use inline code for filenames, functions, classes, and libraries.
 - Use fenced code blocks with the language specified when including code.
 - Do not output HTML.
-
-
 `;
 
+    // Initialize Gemini call
     const geminiResponse = await ai.models.generateContent({
-      model: "gemini-3.5-flash", // Fast, highly capable context-handling model
+      model: "gemini-3.5-flash",
       contents: systemPrompt,
     });
 
@@ -253,7 +201,6 @@ Guidelines:
       "I was unable to analyze the codebase context successfully.";
 
     console.log("DEBUG: Updating the Prisma Database");
-
     await prisma.$transaction([
       prisma.message.create({
         data: { role: "USER", content: message, conversationId },
@@ -273,46 +220,48 @@ Guidelines:
       answer: assistantAnswer,
       sources: uniqueSources,
     });
-  } catch (error) {
-    console.error("RAG Engine Error:", error);
+  } catch (error: any) {
+    console.error({
+      status: error?.status,
+      message: error?.message,
+      details: error,
+    });
     return res
       .status(500)
       .json({ error: "An internal exception occurred during RAG generation." });
   }
 }
 
-export async function getChats(req: Request, res: Response) {
-  const { repositoryId } = req.params;
+export async function getChats(req: AuthRequest, res: Response) {
+  const repositoryId = req.params.repositoryId as string;
+
+  // 1. Extract the verified user ID from the requireAuth middleware layer
+  const userId = req.user?.id;
+
+  if (!userId) {
+    return res
+      .status(401)
+      .json({ error: "Unauthorized: Missing authentication context." });
+  }
 
   try {
-    // 1. Ensure a default user exists to satisfy the relational database constraint
-    let defaultUser = await prisma.user.findFirst();
-
-    // If you recently wiped the DB and no users exist, auto-generate a mock profile
-    if (!defaultUser) {
-      defaultUser = await prisma.user.create({
-        data: {
-          id: "u1111111-1111-1111-1111-111111111111",
-          email: "mehtab.dev@example.com",
-          name: "Mehtab",
-        },
-      });
-    }
-
-    // 2. Look up the existing conversation for this repository context
+    // 2. Look up the conversation matching BOTH this repository AND this authenticated user
     let conversation = await prisma.conversation.findFirst({
-      where: { repositoryId },
+      where: {
+        repositoryId,
+        userId, // Ensures data isolation between different authenticated accounts
+      },
       include: {
         messages: { orderBy: { createdAt: "asc" } },
       },
     });
 
-    // 3. If it doesn't exist, create it while providing the required userId relation
+    // 3. If it doesn't exist, create it tied to the actual logged-in user
     if (!conversation) {
       conversation = await prisma.conversation.create({
         data: {
           repositoryId: repositoryId,
-          userId: defaultUser.id, // 👈 Relational payload link added here!
+          userId: userId, // 👈 Dynamically binds the real user profile!
           title: "New Chat",
         },
         include: {

@@ -2,12 +2,14 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '../store/useAppStore';
-import { Send, Bot, User, FileText, Loader2, Code2 } from 'lucide-react';
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+import { Send, Bot, User, FileText, Loader2, Code2, Clipboard, Check } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import api from '../utils/api';
 
 export default function ChatWindow() {
     const [inputMessage, setInputMessage] = useState('');
+    const [copiedId, setCopiedId] = useState<string | null>(null);
     const chatBottomRef = useRef<HTMLDivElement>(null);
 
     const {
@@ -40,48 +42,42 @@ export default function ChatWindow() {
         });
 
         try {
-            // 2. Query our Express API backend
-            const response = await fetch(`${BACKEND_URL}/api/chat/message`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    conversationId: activeConversationId,
-                    message: userPayloadMessage,
-                }),
+            // 2. Query our Express API backend with security headers appended
+            const response = await api.post('/chat/message', {
+                conversationId: activeConversationId,
+                message: userPayloadMessage,
             });
 
-            const data = await response.json();
-
-            if (response.ok) {
-                // 3. Append the AI response along with the source files extracted from Qdrant
-                addMessage({
-                    id: crypto.randomUUID(),
-                    role: 'ASSISTANT',
-                    content: data.answer,
-                    sources: data.sources,
-                });
-            } else {
-                addMessage({
-                    id: crypto.randomUUID(),
-                    role: 'ASSISTANT',
-                    content: `❌ Error: ${data.error || 'The system could not compile an answer.'}`,
-                });
-            }
-        } catch (err) {
-            console.error('Chat transaction network exception:', err);
+            // 3. Append the AI response along with the source files extracted from Qdrant
             addMessage({
                 id: crypto.randomUUID(),
                 role: 'ASSISTANT',
-                content: '❌ Fatal: Failed to communicate with the RAG server engine.',
+                content: response.data.answer,
+                sources: response.data.sources,
+            });
+        } catch (err: any) {
+            console.error('Chat transaction network exception:', err);
+            const errMsg = err.response?.data?.error || 'The system could not compile an answer.';
+            addMessage({
+                id: crypto.randomUUID(),
+                role: 'ASSISTANT',
+                content: `❌ Error: ${errMsg}`,
             });
         } finally {
             setChatLoading(false);
         }
     };
 
+    // Helper utility to let users easily copy code blocks to their clipboard
+    const handleCopyCode = (codeText: string, blockId: string) => {
+        navigator.clipboard.writeText(codeText);
+        setCopiedId(blockId);
+        setTimeout(() => setCopiedId(null), 2000);
+    };
+
     return (
         <div className="flex-1 flex flex-col h-full bg-slate-950">
-            {/* 1. Main Messages Stream Stream view */}
+            {/* 1. Main Messages Stream view */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
                 {messages.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-2">
@@ -90,7 +86,9 @@ export default function ChatWindow() {
                     </div>
                 ) : (
                     messages.map((msg) => {
-                        const isAI = msg.role === 'ASSISTANT';
+                        // Case-insensitive so 'assistant', 'ASSISTANT', or 'bot' all render as AI
+                        const isAI = msg.role?.toUpperCase() === 'ASSISTANT' || msg.role?.toUpperCase() === 'BOT';
+
                         return (
                             <div
                                 key={msg.id}
@@ -109,12 +107,104 @@ export default function ChatWindow() {
                                 {/* Message Context Block */}
                                 <div className="space-y-3 flex-1 overflow-hidden">
                                     <div
-                                        className={`text-sm leading-relaxed rounded-lg p-4 whitespace-pre-wrap ${isAI
-                                            ? 'bg-slate-900/40 text-slate-200 border border-slate-900'
+                                        className={`text-sm leading-relaxed rounded-lg p-4 ${isAI
+                                            ? 'bg-slate-900/40 text-slate-200 border border-slate-900/80 shadow-inner'
                                             : 'bg-indigo-600 text-white font-medium shadow-md'
                                             }`}
                                     >
-                                        {msg.content}
+                                        {isAI ? (
+                                            <ReactMarkdown
+                                                remarkPlugins={[remarkGfm]}
+                                                components={{
+                                                    p: ({ children }) => <p className="mb-4 last:mb-0 text-slate-300">{children}</p>,
+                                                    h1: ({ children }) => <h1 className="text-xl font-bold mt-6 mb-3 text-white border-b border-slate-800 pb-1">{children}</h1>,
+                                                    h2: ({ children }) => <h2 className="text-lg font-bold mt-5 mb-2 text-white">{children}</h2>,
+                                                    h3: ({ children }) => <h3 className="text-base font-semibold mt-4 mb-2 text-indigo-400">{children}</h3>,
+                                                    h4: ({ children }) => <h4 className="text-sm font-semibold mt-3 mb-1 text-slate-200">{children}</h4>,
+                                                    ul: ({ children }) => <ul className="list-disc pl-6 mb-4 space-y-2 text-slate-300">{children}</ul>,
+                                                    ol: ({ children }) => <ol className="list-decimal pl-6 mb-4 space-y-2 text-slate-300">{children}</ol>,
+                                                    li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+                                                    a: ({ children, href }) => (
+                                                        <a
+                                                            href={href}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-indigo-400 underline hover:text-indigo-300"
+                                                        >
+                                                            {children}
+                                                        </a>
+                                                    ),
+                                                    strong: ({ children }) => <strong className="font-bold text-white bg-slate-900/50 px-1 rounded">{children}</strong>,
+                                                    blockquote: ({ children }) => (
+                                                        <blockquote className="border-l-2 border-indigo-700 pl-3 my-3 text-slate-400 italic">
+                                                            {children}
+                                                        </blockquote>
+                                                    ),
+                                                    table: ({ children }) => (
+                                                        <div className="overflow-x-auto my-4 rounded-md border border-slate-800">
+                                                            <table className="w-full text-xs">{children}</table>
+                                                        </div>
+                                                    ),
+                                                    thead: ({ children }) => <thead className="bg-slate-900/70">{children}</thead>,
+                                                    th: ({ children }) => <th className="px-3 py-2 text-left font-semibold text-slate-200 border-b border-slate-800">{children}</th>,
+                                                    td: ({ children }) => <td className="px-3 py-2 border-b border-slate-900 text-slate-300 align-top">{children}</td>,
+
+                                                    // Fenced code blocks (```...```) are always wrapped in <pre><code>
+                                                    // by remark, so intercepting at the `pre` level reliably
+                                                    // distinguishes them from inline code spans without needing
+                                                    // the (removed-in-v9) `inline` prop.
+                                                    pre({ children }: any) {
+                                                        const codeChild = children?.props ?? {};
+                                                        const className = codeChild.className || '';
+                                                        const match = /language-(\w+)/.exec(className);
+                                                        const codeString = String(codeChild.children ?? '').replace(/\n$/, '');
+                                                        const blockId = `${codeString.length}-${codeString.slice(0, 12)}`;
+
+                                                        return (
+                                                            <div className="my-4 rounded-md border border-slate-800 bg-slate-950 overflow-hidden shadow-2xl">
+                                                                <div className="flex items-center justify-between px-4 py-2 bg-slate-900/80 border-b border-slate-800/60 text-xs text-slate-400 font-mono">
+                                                                    <span>{match ? match[1] : 'source'}</span>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleCopyCode(codeString, blockId)}
+                                                                        className="flex items-center gap-1 hover:text-white transition-colors"
+                                                                    >
+                                                                        {copiedId === blockId ? (
+                                                                            <>
+                                                                                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                                                                <span className="text-emerald-400 font-medium">Copied!</span>
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <Clipboard className="w-3.5 h-3.5" />
+                                                                                <span>Copy</span>
+                                                                            </>
+                                                                        )}
+                                                                    </button>
+                                                                </div>
+                                                                <pre className="p-4 overflow-x-auto font-mono text-xs text-emerald-400/90 bg-slate-950/60 leading-relaxed selection:bg-indigo-500/30">
+                                                                    <code>{codeString}</code>
+                                                                </pre>
+                                                            </div>
+                                                        );
+                                                    },
+
+                                                    // Only ever reached for inline code spans (`like this`),
+                                                    // since block code is intercepted by `pre` above.
+                                                    code({ children }: any) {
+                                                        return (
+                                                            <code className="bg-slate-900 border border-slate-800 text-indigo-300 px-1.5 py-0.5 rounded font-mono text-xs mx-0.5 break-words">
+                                                                {children}
+                                                            </code>
+                                                        );
+                                                    },
+                                                }}
+                                            >
+                                                {msg.content}
+                                            </ReactMarkdown>
+                                        ) : (
+                                            <span className="whitespace-pre-wrap">{msg.content}</span>
+                                        )}
                                     </div>
 
                                     {/* Cited Semantic Reference Badges */}
@@ -127,7 +217,7 @@ export default function ChatWindow() {
                                                 {msg.sources.map((src, i) => (
                                                     <span
                                                         key={i}
-                                                        className="bg-slate-900 border border-slate-800 text-slate-400 px-2 py-0.5 rounded text-[11px] font-mono truncate max-w-xs"
+                                                        className="bg-slate-900 border border-slate-800 text-slate-400 px-2 py-0.5 rounded text-[11px] font-mono truncate max-w-xs hover:border-slate-700 transition-colors cursor-help"
                                                         title={src}
                                                     >
                                                         {src.split('/').pop()} {/* Displays file name only */}
