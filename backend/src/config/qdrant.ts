@@ -4,8 +4,12 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const qdrantUrl = process.env.QDRANT_URL || "http://localhost:6333";
+const qdrantApiKey = process.env.QDRANT_API_KEY; // Required for Qdrant Cloud
 
-export const qdrantClient = new QdrantClient({ url: qdrantUrl });
+export const qdrantClient = new QdrantClient({
+  url: qdrantUrl,
+  ...(qdrantApiKey ? { apiKey: qdrantApiKey } : {}),
+});
 
 export const COLLECTION_NAME = "codebase_chunks";
 
