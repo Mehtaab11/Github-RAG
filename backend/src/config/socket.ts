@@ -9,7 +9,8 @@ let io: SocketServer | null = null;
 export function initSocket(server: HttpServer) {
   io = new SocketServer(server, {
     cors: {
-      origin: process.env.FRONTEND_URL || "http://localhost:3000", // Matches your Next.js port
+      origin: process.env.FRONTEND_URL || "http://localhost:3000",
+      credentials: true, // Matches your Next.js port
       methods: ["GET", "POST"],
     },
   });
