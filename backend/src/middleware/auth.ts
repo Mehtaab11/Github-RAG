@@ -2,11 +2,19 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { JWT_SECRET } from "../config/jwt";
 
-export interface AuthRequest extends Request {
-  user?: {
-    id: string;
-  };
+// Augment Express's global Request type — the idiomatic TS+Express pattern.
+// This adds `user` to every Request object so no interface extension is needed.
+declare global {
+  namespace Express {
+    interface Request {
+      user?: { id: string };
+    }
+  }
 }
+
+// AuthRequest is now just an alias — kept for backwards compatibility
+// with all controllers that import it.
+export type AuthRequest = Request;
 
 export const requireAuth = (
   req: AuthRequest,
