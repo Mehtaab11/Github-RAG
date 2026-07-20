@@ -1,11 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { JWT_SECRET } from "../config/jwt";
-import type { ParamsDictionary } from "express-serve-static-core";
-import type { ParsedQs } from "qs";
 
-export interface AuthRequest
-  extends Request<ParamsDictionary, any, any, ParsedQs, Record<string, any>> {
+export interface AuthRequest extends Request {
   user?: {
     id: string;
   };
