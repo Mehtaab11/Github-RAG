@@ -7,12 +7,24 @@ let io: SocketServer | null = null;
  * Initializes the Socket.io server layer on top of our existing HTTP engine.
  */
 export function initSocket(server: HttpServer) {
+  const allowedOrigins = process.env.FRONTEND_URL
+    ? [
+        process.env.FRONTEND_URL,
+        process.env.FRONTEND_URL.replace(/\/$/, ""),
+        "http://localhost:3000",
+      ]
+    : "*";
+
   io = new SocketServer(server, {
     cors: {
-      origin: process.env.FRONTEND_URL || "http://localhost:3000",
-      credentials: true, // Matches your Next.js port
+      origin: allowedOrigins,
+      credentials: true,
       methods: ["GET", "POST"],
     },
+    transports: ["websocket", "polling"],
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    allowEIO3: true,
   });
 
   io.on("connection", (socket) => {

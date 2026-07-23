@@ -1,17 +1,41 @@
-import fs from 'fs/promises';
-import path from 'path';
-import simpleGit from 'simple-git';
-import os from 'os';
-import { qdrantClient, COLLECTION_NAME } from '../config/qdrant';
+import fs from "fs/promises";
+import path from "path";
+import simpleGit from "simple-git";
+import os from "os";
+import { Job } from "bullmq";
+import { qdrantClient, COLLECTION_NAME } from "../config/qdrant";
+import { getIO } from "../config/socket";
 
 // Extensive skip arrays to ignore irrelevant noise
 const IGNORED_DIRECTORIES = new Set([
-  'node_modules', 'dist', 'build', '.git', 'coverage', '.next', 'out', 'bin', 'obj'
+  "node_modules",
+  "dist",
+  "build",
+  ".git",
+  "coverage",
+  ".next",
+  "out",
+  "bin",
+  "obj",
 ]);
 
 const IGNORED_EXTENSIONS = new Set([
-  '.png', '.jpg', '.jpeg', '.gif', '.ico', '.svg', '.mp4', '.mp3', '.pdf', '.zip', '.tar', '.gz', 
-  '.lock', '-lock.json', '.yaml', '.yml'
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".ico",
+  ".svg",
+  ".mp4",
+  ".mp3",
+  ".pdf",
+  ".zip",
+  ".tar",
+  ".gz",
+  ".lock",
+  "-lock.json",
+  ".yaml",
+  ".yml",
 ]);
 
 interface CodeChunk {
@@ -33,11 +57,16 @@ let embeddingPipelineInstance: any = null;
 async function getEmbeddingPipeline() {
   if (!embeddingPipelineInstance) {
     // Dynamic import to cleanly load the ESM transformers library inside standard Node scripts
-    const { pipeline } = await import('@xenova/transformers');
-    
-    console.log('⏳ Loading local embedding model (Xenova/bge-base-en-v1.5)...');
-    embeddingPipelineInstance = await pipeline('feature-extraction', 'Xenova/bge-base-en-v1.5');
-    console.log('🚀 Local embedding model loaded successfully.');
+    const { pipeline } = await import("@xenova/transformers");
+
+    console.log(
+      "⏳ Loading local embedding model (Xenova/bge-base-en-v1.5)...",
+    );
+    embeddingPipelineInstance = await pipeline(
+      "feature-extraction",
+      "Xenova/bge-base-en-v1.5",
+    );
+    console.log("🚀 Local embedding model loaded successfully.");
   }
   return embeddingPipelineInstance;
 }
@@ -49,17 +78,20 @@ async function getEmbeddingPipeline() {
 export async function cloneRepository(githubUrl: string): Promise<string> {
   const tempDir = path.join(os.tmpdir(), `git-repo-${Date.now()}`);
   await fs.mkdir(tempDir, { recursive: true });
-  
+
   const git = simpleGit();
   console.log(`Cloning ${githubUrl} into ${tempDir}...`);
-  await git.clone(githubUrl, tempDir, ['--depth', '1']);
+  await git.clone(githubUrl, tempDir, ["--depth", "1"]);
   return tempDir;
 }
 
 /**
  * Recursively walks through files, reads source content, and extracts code blocks.
  */
-export async function scanAndChunkRepository(dirPath: string, rootPath: string = dirPath): Promise<CodeChunk[]> {
+export async function scanAndChunkRepository(
+  dirPath: string,
+  rootPath: string = dirPath,
+): Promise<CodeChunk[]> {
   const entries = await fs.readdir(dirPath, { withFileTypes: true });
   let chunks: CodeChunk[] = [];
 
@@ -73,11 +105,12 @@ export async function scanAndChunkRepository(dirPath: string, rootPath: string =
       chunks = chunks.concat(subChunks);
     } else if (entry.isFile()) {
       const ext = path.extname(entry.name).toLowerCase();
-      if (IGNORED_EXTENSIONS.has(ext) || IGNORED_EXTENSIONS.has(entry.name)) continue;
+      if (IGNORED_EXTENSIONS.has(ext) || IGNORED_EXTENSIONS.has(entry.name))
+        continue;
 
       try {
-        const content = await fs.readFile(fullPath, 'utf-8');
-        if (!content.trim() || content.length > 500000) continue; 
+        const content = await fs.readFile(fullPath, "utf-8");
+        if (!content.trim() || content.length > 500000) continue;
 
         const fileChunks = sliceCodeIntoChunks(relativePath, content);
         chunks = chunks.concat(fileChunks);
@@ -93,19 +126,19 @@ export async function scanAndChunkRepository(dirPath: string, rootPath: string =
  * Slices a source file into semantic window-blocks based on target sizing metrics.
  */
 function sliceCodeIntoChunks(filePath: string, content: string): CodeChunk[] {
-  const lines = content.split('\n');
+  const lines = content.split("\n");
   const chunks: CodeChunk[] = [];
-  
-  const chunkSizeInLines = 60;   
-  const chunkOverlapInLines = 15; 
+
+  const chunkSizeInLines = 60;
+  const chunkOverlapInLines = 15;
 
   let i = 0;
   while (i < lines.length) {
     const startLine = i + 1;
     const endLine = Math.min(lines.length, i + chunkSizeInLines);
-    
+
     const chunkLines = lines.slice(i, endLine);
-    const chunkContent = chunkLines.join('\n');
+    const chunkContent = chunkLines.join("\n");
 
     if (chunkContent.trim().length > 40) {
       chunks.push({
@@ -117,7 +150,7 @@ function sliceCodeIntoChunks(filePath: string, content: string): CodeChunk[] {
     }
 
     if (endLine === lines.length) break;
-    i += (chunkSizeInLines - chunkOverlapInLines);
+    i += chunkSizeInLines - chunkOverlapInLines;
   }
 
   return chunks;
@@ -126,25 +159,38 @@ function sliceCodeIntoChunks(filePath: string, content: string): CodeChunk[] {
 /**
  * Batches text blocks out to the local BGE model and loads vectors into Qdrant.
  */
-export async function generateAndStoreEmbeddings(repositoryId: string, chunks: CodeChunk[]) {
-  console.log(`🧬 Processing ${chunks.length} chunks via Local BGE Embedding Engine...`);
-  
+export async function generateAndStoreEmbeddings(
+  repositoryId: string,
+  chunks: CodeChunk[],
+  job?: Job,
+) {
+  console.log(
+    `🧬 Processing ${chunks.length} chunks via Local BGE Embedding Engine...`,
+  );
+
+  console.log("before embedding pipeline");
   const extractor = await getEmbeddingPipeline();
-  
+  console.log("after embedding pipeline");
+
   // Processing in batches preserves optimal memory control and limits heap inflation
   const BATCH_SIZE = 25;
 
   for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
     const batch = chunks.slice(i, i + BATCH_SIZE);
-    console.log(`📡 Vectorizing batch ${Math.floor(i / BATCH_SIZE) + 1} of ${Math.ceil(chunks.length / BATCH_SIZE)}...`);
+    console.log(
+      `📡 Vectorizing batch ${Math.floor(i / BATCH_SIZE) + 1} of ${Math.ceil(chunks.length / BATCH_SIZE)}...`,
+    );
 
     const qdrantPoints = [];
 
     for (const chunk of batch) {
       try {
         // Generate embeddings locally. Mean pooling and normalization match the BGE specification.
-        const output = await extractor(chunk.content, { pooling: 'mean', normalize: true });
-        
+        const output = await extractor(chunk.content, {
+          pooling: "mean",
+          normalize: true,
+        });
+
         // Extract plain array numbers out of the underlying ONNX Tensor object
         const vectorValue = Array.from(output.data) as number[];
 
@@ -160,7 +206,10 @@ export async function generateAndStoreEmbeddings(repositoryId: string, chunks: C
           },
         });
       } catch (chunkError) {
-        console.error(`❌ Failed to extract embedding vector for file block: ${chunk.filePath}`, chunkError);
+        console.error(
+          `❌ Failed to extract embedding vector for file block: ${chunk.filePath}`,
+          chunkError,
+        );
         throw chunkError;
       }
     }
@@ -170,7 +219,28 @@ export async function generateAndStoreEmbeddings(repositoryId: string, chunks: C
       wait: true,
       points: qdrantPoints,
     });
+
+    const processedCount = Math.min(chunks.length, i + batch.length);
+    const progress = Math.min(
+      95,
+      Math.floor(50 + (processedCount / chunks.length) * 45),
+    );
+
+    if (job) {
+      await job.updateProgress(progress);
+    }
+
+    try {
+      getIO().to(repositoryId).emit("ingestion-progress", {
+        status: "PROCESSING",
+        progress,
+      });
+    } catch (socketErr) {
+      // Ignore socket emit errors if client disconnected
+    }
   }
-  
-  console.log(`🎯 Successfully indexed all local vectors to Qdrant for repo: ${repositoryId}`);
+
+  console.log(
+    `🎯 Successfully indexed all local vectors to Qdrant for repo: ${repositoryId}`,
+  );
 }

@@ -31,20 +31,27 @@ export async function ingestRepository(req: Request, res: Response) {
       },
     });
 
-    if (repo) {
+    if (repo && repo.status === "READY" && !req.body.force) {
       return res.status(200).json({
         message: "This repository is already present and being analyzed",
         repository: repo,
       });
     }
 
-    repo = await prisma.repository.create({
-      data: {
-        githubUrl,
-        name: fullRepoName,
-        status: "PENDING",
-      },
-    });
+    if (!repo) {
+      repo = await prisma.repository.create({
+        data: {
+          githubUrl,
+          name: fullRepoName,
+          status: "PENDING",
+        },
+      });
+    } else {
+      repo = await prisma.repository.update({
+        where: { id: repo.id },
+        data: { status: "PENDING" },
+      });
+    }
 
     const job = await repoIngestionQueue.add(`ingest-${repo.id}`, {
       repositoryId: repo.id,

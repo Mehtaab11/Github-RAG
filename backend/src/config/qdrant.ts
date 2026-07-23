@@ -35,6 +35,17 @@ export async function initQdrant() {
     } else {
       console.log(`Collection "${COLLECTION_NAME}" is ready.`);
     }
+
+    try {
+      await qdrantClient.createPayloadIndex(COLLECTION_NAME, {
+        field_name: "repositoryId",
+        field_schema: "keyword",
+        wait: true,
+      });
+      console.log(`Payload index for "repositoryId" verified in Qdrant.`);
+    } catch (indexError) {
+      // Ignore if index already exists
+    }
   } catch (error) {
     console.error("Failed to initialize Qdrant client:", error);
     process.exit(1);
