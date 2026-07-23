@@ -74,6 +74,20 @@ export async function ingestRepository(req: Request, res: Response) {
 export async function getRepository(req: Request, res: Response) {
   try {
     const repos = await prisma.repository.findMany({
+      where: {
+        userId: req.user.id,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    return res.status(200).json(repos);
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to fetch repositories" });
+  }
+}
+
+export async function getAllRepository(req: Request, res: Response) {
+  try {
+    const repos = await prisma.repository.findMany({
       orderBy: { createdAt: "desc" },
     });
     return res.status(200).json(repos);
