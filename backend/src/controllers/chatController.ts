@@ -72,6 +72,8 @@ export async function handleChatMessage(req: AuthRequest, res: Response) {
       limit: 5,
     });
 
+    // console.log("DEBUG: Search results from vector DB:", searchResults);
+
     console.log("DEBUG: Preparing the code blocks and file path");
     const contextBlocks = searchResults
       .map((hit) => hit.payload?.content)
@@ -190,9 +192,11 @@ Guidelines:
 - Do not output HTML.
 `;
 
+    // console.log(contextBlocks);
+
     // Initialize Gemini call
     const geminiResponse = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: process.env.GEMINI_MODEL || "gemini-3.6-flash",
       contents: systemPrompt,
     });
 
@@ -201,19 +205,18 @@ Guidelines:
       "I was unable to analyze the codebase context successfully.";
 
     console.log("DEBUG: Updating the Prisma Database");
-    await prisma.$transaction([
-      prisma.message.create({
-        data: { role: "USER", content: message, conversationId },
-      }),
-      prisma.message.create({
-        data: {
-          role: "ASSISTANT",
-          content: assistantAnswer,
-          conversationId,
-          sources: uniqueSources as Prisma.InputJsonValue,
-        },
-      }),
-    ]);
+    await prisma.message.create({
+      data: { role: "USER", content: message, conversationId },
+    });
+
+    await prisma.message.create({
+      data: {
+        role: "ASSISTANT",
+        content: assistantAnswer,
+        conversationId,
+        sources: uniqueSources as Prisma.InputJsonValue,
+      },
+    });
 
     console.log("Complete");
     return res.status(200).json({

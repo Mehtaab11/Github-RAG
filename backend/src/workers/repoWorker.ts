@@ -24,6 +24,17 @@ export function startRepoWorker() {
 
       console.log(`⏳ Worker picked up job ${job.id} for repo: ${githubUrl}`);
 
+      const existingRepo = await prisma.repository.findUnique({
+        where: { id: repositoryId },
+      });
+
+      if (!existingRepo) {
+        console.warn(
+          `⚠️ Repository record ${repositoryId} no longer exists in database. Aborting orphaned job ${job.id}.`,
+        );
+        return { success: false, reason: "Repository deleted" };
+      }
+
       try {
         // 1. Move to CLONING
         await prisma.repository.update({
@@ -60,7 +71,7 @@ export function startRepoWorker() {
         }
 
         // 5. Build Vectors and store in Qdrant
-        await generateAndStoreEmbeddings(repositoryId, chunks);
+        await generateAndStoreEmbeddings(repositoryId, chunks, job);
 
         // 6. Finalize Postgres State to READY
         await prisma.repository.update({
@@ -74,16 +85,20 @@ export function startRepoWorker() {
         await job.updateProgress(100);
       } catch (error: any) {
         console.error(`❌ Ingestion Failure inside Job ${job.id}:`, error);
-        await prisma.repository.update({
-          where: { id: repositoryId },
-          data: { status: "FAILED" },
-        });
+        try {
+          await prisma.repository.update({
+            where: { id: repositoryId },
+            data: { status: "FAILED" },
+          });
 
-        //  Broadcast catastrophic failure state
-        getIO().to(repositoryId).emit("ingestion-progress", {
-          status: "FAILED",
-          error: error.message,
-        });
+          //  Broadcast catastrophic failure state
+          getIO().to(repositoryId).emit("ingestion-progress", {
+            status: "FAILED",
+            error: error.message,
+          });
+        } catch (dbErr) {
+          // Ignore if repo record was deleted from database
+        }
         throw error;
       } finally {
         if (localWorkspacePath) {
@@ -99,7 +114,12 @@ export function startRepoWorker() {
       }
       return { success: true, repositoryId };
     },
-    { connection: redisConnection },
+    {
+      connection: redisConnection,
+      lockDuration: 300000, // 5 minutes lock duration for long git clones & model loading
+      stalledInterval: 60000,
+      maxStalledCount: 3,
+    },
   );
 
   worker.on("completed", (job) => {

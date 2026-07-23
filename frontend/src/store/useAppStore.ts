@@ -53,10 +53,20 @@ export const useAppStore = create<AppState>((set, get) => ({
   initSocket: () => {
     if (get().socket) return; // Prevent duplicate initializations
 
-    const socketInstance = io(BACKEND_URL);
+    const socketInstance = io(BACKEND_URL, {
+      transports: ['websocket', 'polling'],
+      withCredentials: true,
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+    });
 
     socketInstance.on('connect', () => {
       console.log('🔌 Connected to live backend WebSocket wrapper.');
+      const activeRepoId = get().activeRepoId;
+      if (activeRepoId) {
+        socketInstance.emit('join-repo-room', activeRepoId);
+      }
     });
 
     // Listen for live ingestion progress updates pushed by the BullMQ background worker
