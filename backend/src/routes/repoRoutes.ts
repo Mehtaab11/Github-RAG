@@ -9,6 +9,6 @@ const router = Router();
 
 router.post("/ingest", requireAuth, ingestRepository);
 router.get("/", requireAuth, getRepository);
-router.get("/all", getAllRepository);
+router.get("/all", requireAuth, getAllRepository);
 
 export default router;

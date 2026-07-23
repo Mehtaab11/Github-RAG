@@ -1,8 +1,9 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import { prisma } from "../config/db";
+import { AuthRequest } from "../middleware/auth";
 import { repoIngestionQueue } from "../workers/queue";
 
-export async function ingestRepository(req: Request, res: Response) {
+export async function ingestRepository(req: AuthRequest, res: Response) {
   try {
     const { githubUrl } = req.body;
 
@@ -21,6 +22,11 @@ export async function ingestRepository(req: Request, res: Response) {
       });
     }
 
+    const authenticatedUserId = req.user?.id;
+    if (!authenticatedUserId) {
+      return res.status(401).json({ error: "Unauthorized: Missing user session." });
+    }
+
     const owner = match[1];
     const cleanRepoName = match[2].replace(/\.git$/, "");
     const fullRepoName = `${owner}/${cleanRepoName}`;
@@ -30,6 +36,12 @@ export async function ingestRepository(req: Request, res: Response) {
         githubUrl,
       },
     });
+
+    if (repo && repo.userId && repo.userId !== authenticatedUserId) {
+      return res.status(409).json({
+        error: "This repository is already associated with another account.",
+      });
+    }
 
     if (repo && repo.status === "READY" && !req.body.force) {
       return res.status(200).json({
@@ -44,12 +56,16 @@ export async function ingestRepository(req: Request, res: Response) {
           githubUrl,
           name: fullRepoName,
           status: "PENDING",
+          userId: authenticatedUserId,
         },
       });
     } else {
       repo = await prisma.repository.update({
         where: { id: repo.id },
-        data: { status: "PENDING" },
+        data: {
+          status: "PENDING",
+          userId: authenticatedUserId,
+        },
       });
     }
 
@@ -71,23 +87,65 @@ export async function ingestRepository(req: Request, res: Response) {
   }
 }
 
-export async function getRepository(req: Request, res: Response) {
+export async function getRepository(req: AuthRequest, res: Response) {
   try {
-    const repos = await prisma.repository.findMany({
+    const authenticatedUserId = req.user?.id;
+    if (!authenticatedUserId) {
+      return res.status(401).json({ error: "Unauthorized: Missing user session." });
+    }
+
+    let repos = await prisma.repository.findMany({
       where: {
-        userId: req.user.id,
+        userId: authenticatedUserId,
       },
       orderBy: { createdAt: "desc" },
     });
+
+    if (repos.length === 0) {
+      const legacyRepos = await prisma.repository.findMany({
+        where: {
+          userId: null,
+        },
+      });
+
+      if (legacyRepos.length > 0) {
+        await prisma.repository.updateMany({
+          where: {
+            id: {
+              in: legacyRepos.map((repo) => repo.id),
+            },
+          },
+          data: {
+            userId: authenticatedUserId,
+          },
+        });
+
+        repos = await prisma.repository.findMany({
+          where: {
+            userId: authenticatedUserId,
+          },
+          orderBy: { createdAt: "desc" },
+        });
+      }
+    }
+
     return res.status(200).json(repos);
   } catch (error) {
     return res.status(500).json({ error: "Failed to fetch repositories" });
   }
 }
 
-export async function getAllRepository(req: Request, res: Response) {
+export async function getAllRepository(req: AuthRequest, res: Response) {
   try {
+    const authenticatedUserId = req.user?.id;
+    if (!authenticatedUserId) {
+      return res.status(401).json({ error: "Unauthorized: Missing user session." });
+    }
+
     const repos = await prisma.repository.findMany({
+      where: {
+        userId: authenticatedUserId,
+      },
       orderBy: { createdAt: "desc" },
     });
     return res.status(200).json(repos);

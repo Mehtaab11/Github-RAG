@@ -38,7 +38,8 @@ interface AppState {
   setChatLoading: (loading: boolean) => void;
 }
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ||
+  (process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api$/, '') : 'http://localhost:5000');
 
 export const useAppStore = create<AppState>((set, get) => ({
   socket: null,

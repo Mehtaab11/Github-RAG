@@ -46,6 +46,7 @@ export const useAuthStore = create<AuthState>()(
     {
       name: "repo_gpt_auth",
       partialize: (state) => ({
+        token: state.token,
         user: state.user,
         isAuthenticated: state.isAuthenticated,
       }),
