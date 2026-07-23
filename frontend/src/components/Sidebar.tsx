@@ -24,7 +24,9 @@ export default function Sidebar() {
   useEffect(() => {
     async function fetchRepos() {
       try {
-        const response = await api.get('/repositories');
+        const response = await api.get('/repositories' , {
+          
+        });
         setRepositories(response.data);
       } catch (err) {
         console.error('Failed to populate repository indexing list:', err);

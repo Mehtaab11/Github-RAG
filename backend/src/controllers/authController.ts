@@ -5,6 +5,15 @@ import jwt from "jsonwebtoken";
 import { prisma } from "../config/db"; // Adjust to your prisma client path
 import { JWT_SECRET } from "../config/jwt";
 
+const isProduction = process.env.NODE_ENV === "production";
+const cookieOptions = {
+  httpOnly: true,
+  secure: isProduction,
+  sameSite: (isProduction ? "none" : "lax") as "none" | "lax",
+  path: "/" as const,
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+};
+
 // 📝 USER REGISTRATION
 export const register = async (req: Request, res: Response) => {
   const { email, password, name } = req.body;
@@ -39,12 +48,7 @@ export const register = async (req: Request, res: Response) => {
     // Generate user token session
     const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: "7d" });
 
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
+    res.cookie("token", token, cookieOptions);
 
     return res.status(201).json({
       token,
@@ -93,12 +97,7 @@ export const login = async (req: Request, res: Response) => {
     // Establish a signed security token session
     const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: "7d" });
 
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
+    res.cookie("token", token, cookieOptions);
 
     return res.status(200).json({
       token,
@@ -115,9 +114,8 @@ export const login = async (req: Request, res: Response) => {
 // 🚪 USER LOGOUT
 export const logout = async (req: Request, res: Response) => {
   res.clearCookie("token", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    ...cookieOptions,
+    maxAge: undefined,
   });
   return res.status(200).json({ message: "Successfully logged out" });
 };

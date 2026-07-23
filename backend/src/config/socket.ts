@@ -7,17 +7,23 @@ let io: SocketServer | null = null;
  * Initializes the Socket.io server layer on top of our existing HTTP engine.
  */
 export function initSocket(server: HttpServer) {
-  const allowedOrigins = process.env.FRONTEND_URL
-    ? [
-        process.env.FRONTEND_URL,
-        process.env.FRONTEND_URL.replace(/\/$/, ""),
-        "http://localhost:3000",
-      ]
-    : "*";
+  const configuredOrigins = (process.env.FRONTEND_URL || process.env.ALLOWED_ORIGINS || "http://localhost:3000")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  const allowedOrigins = [...new Set([ ...configuredOrigins, "http://localhost:3000" ])];
 
   io = new SocketServer(server, {
     cors: {
-      origin: allowedOrigins,
+      origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+          callback(null, true);
+          return;
+        }
+
+        callback(new Error(`Origin ${origin} is not allowed by Socket.IO CORS`));
+      },
       credentials: true,
       methods: ["GET", "POST"],
     },
