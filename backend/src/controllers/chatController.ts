@@ -5,6 +5,7 @@ import { qdrantClient, COLLECTION_NAME } from "../config/qdrant";
 import { prisma } from "../config/db";
 import { Prisma } from "@prisma/client";
 import { AuthRequest } from "../middleware/auth";
+import { buildRepoPrompt } from "../constants/prompts";
 
 export async function handleChatMessage(req: AuthRequest, res: Response) {
   try {
@@ -25,6 +26,7 @@ export async function handleChatMessage(req: AuthRequest, res: Response) {
     }
 
     // Secure Gatekeeping: Ensure the conversation exists AND belongs to this specific user
+    // Fetch recent message history (last 8 messages) for multi-turn context retention
     const conversation = await prisma.conversation.findFirst({
       where: {
         id: conversationId,
@@ -32,6 +34,10 @@ export async function handleChatMessage(req: AuthRequest, res: Response) {
       },
       include: {
         repository: true,
+        messages: {
+          orderBy: { createdAt: "desc" },
+          take: 8,
+        },
       },
     });
 
@@ -40,6 +46,18 @@ export async function handleChatMessage(req: AuthRequest, res: Response) {
         error: "Repository or Conversation workspace thread not found.",
       });
     }
+
+    // Chronological order for recent messages
+    const recentMessages = [...(conversation.messages || [])].reverse();
+    const formattedHistory =
+      recentMessages.length > 0
+        ? recentMessages
+            .map(
+              (m) =>
+                `${m.role === "USER" ? "Developer" : "RepoGPT"}: ${m.content}`,
+            )
+            .join("\n\n")
+        : "No prior conversation.";
 
     // Building the vector of the given message
     console.log("DEBUG: Building pipeline");
@@ -61,7 +79,6 @@ export async function handleChatMessage(req: AuthRequest, res: Response) {
     // Search Qdrant for top code snippets matching the query vector within this repository
     console.log("DEBUG: Searching the qdrant");
 
-    // Fix: Explicitly ensure repositoryId is string evaluated
     const targetRepoId = conversation.repositoryId as string;
 
     const searchResults = await qdrantClient.search(COLLECTION_NAME, {
@@ -69,134 +86,29 @@ export async function handleChatMessage(req: AuthRequest, res: Response) {
       filter: {
         must: [{ key: "repositoryId", match: { value: targetRepoId } }],
       },
-      limit: 5,
+      limit: 7,
     });
-
-    // console.log("DEBUG: Search results from vector DB:", searchResults);
 
     console.log("DEBUG: Preparing the code blocks and file path");
     const contextBlocks = searchResults
       .map((hit) => hit.payload?.content)
+      .filter(Boolean)
       .join("\n\n---\n\n");
 
     const uniqueSources = Array.from(
       new Set(searchResults.map((hit) => hit.payload?.filePath)),
     ).filter(Boolean);
 
-    const systemPrompt = `You are RepoGPT, an expert AI software engineering assistant specializing in understanding, analyzing, debugging, and explaining GitHub repositories.
+    const systemPrompt = buildRepoPrompt({
+      repoName: conversation.repository.name,
+      contextBlocks,
+      formattedHistory,
+      message,
+    });
 
-You are helping a developer understand the following repository:
-
-Repository:
-${conversation.repository.name}
-
-======================================================================
-REPOSITORY CONTEXT
-======================================================================
-
-The following code snippets were retrieved using semantic search because they are relevant to the user's question.
-
-${contextBlocks}
-
-======================================================================
-END OF REPOSITORY CONTEXT
-======================================================================
-
-======================================================================
-USER QUESTION
-======================================================================
-
-${message}
-
-======================================================================
-INSTRUCTIONS
-======================================================================
-
-The repository context above is your primary source of truth.
-Use it to answer the user's question accurately.
-If the provided context does not contain enough information to answer confidently, explicitly state that you don't have enough repository context instead of guessing.
-
-Never invent:
-- files
-- classes
-- functions
-- APIs
-- implementation details
-- project architecture
-
-When possible, reference relevant files, modules, classes, interfaces, functions, or methods.
-Connect information from multiple retrieved snippets whenever appropriate.
-Do not simply summarize the code. Explain what it does, why it exists, and how it relates to the user's question.
-
-======================================================================
-RESPONSE STYLE
-======================================================================
-
-Adapt the depth and structure of your response to the user's question.
-
-For simple factual questions:
-- Answer directly.
-- Keep the response concise.
-- Avoid unnecessary headings.
-- Use bullet points only when they improve readability.
-- Mention relevant files only if they add value.
-
-For explanatory questions:
-- Explain the reasoning.
-- Reference important repository components.
-- Use headings only when they improve clarity.
-
-For debugging questions:
-- Explain the likely cause.
-- Explain your reasoning.
-- Suggest possible fixes.
-- Mention assumptions if context is incomplete.
-
-For architecture or design questions:
-Explain:
-- component responsibilities
-- execution flow
-- data flow
-- dependencies
-- trade-offs
-Use clear headings where appropriate.
-
-For code generation:
-Generate clean, production-quality code that follows the apparent coding style of the repository.
-
-======================================================================
-FORMATTING
-======================================================================
-
-Produce clean Markdown.
-Use headings only when needed, bullet points when appropriate, and numbered steps when explaining workflows.
-Keep paragraphs short. Avoid repeating information. Avoid unnecessary introductions or conclusions.
-Match the amount of detail to the complexity of the user's question.
-
-======================================================================
-FINAL RULES
-======================================================================
-
-1. Be technically accurate.
-2. Stay grounded in the repository context.
-3. Explain clearly.
-4. Never hallucinate repository details.
-5. Optimize for usefulness rather than verbosity.
-6. If information is missing, explicitly say so instead of guessing.
-
-Guidelines:
-- Use bullet lists where appropriate.
-- Use **bold** for important technologies.
-- Use inline code for filenames, functions, classes, and libraries.
-- Use fenced code blocks with the language specified when including code.
-- Do not output HTML.
-`;
-
-    // console.log(contextBlocks);
-
-    // Initialize Gemini call
+    // Initialize Gemini call with models/gemini-3.6-flash
     const geminiResponse = await ai.models.generateContent({
-      model: process.env.GEMINI_MODEL || "gemini-3.6-flash",
+      model: process.env.GEMINI_MODEL || "models/gemini-3.6-flash",
       contents: systemPrompt,
     });
 
