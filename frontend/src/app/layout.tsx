@@ -13,8 +13,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className="antialiased bg-slate-950">
+    <html lang="en" suppressHydrationWarning>
+      <body className="antialiased bg-slate-950" suppressHydrationWarning>
         {/* The guard catches route shifts anywhere in the app directory */}
         <AuthGuard>
           {children}

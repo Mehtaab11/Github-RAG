@@ -106,15 +106,8 @@ export async function handleChatMessage(req: AuthRequest, res: Response) {
       message,
     });
 
-    // Initialize Gemini call with models/gemini-3.6-flash
-    const geminiResponse = await ai.models.generateContent({
-      model: process.env.GEMINI_MODEL || "models/gemini-3.6-flash",
-      contents: systemPrompt,
-    });
-
-    const assistantAnswer =
-      geminiResponse.text ||
-      "I was unable to analyze the codebase context successfully.";
+    // Call Gemini with automatic fallback on 503/429 high demand spikes
+    const assistantAnswer = await generateGeminiResponse(systemPrompt);
 
     console.log("DEBUG: Updating the Prisma Database");
     await prisma.message.create({
@@ -145,6 +138,46 @@ export async function handleChatMessage(req: AuthRequest, res: Response) {
       .status(500)
       .json({ error: "An internal exception occurred during RAG generation." });
   }
+}
+
+/**
+ * Resilient Gemini Content Generation with Multi-Model Fallback Queue.
+ * Tries the primary requested model first (e.g. models/gemini-3.6-flash),
+ * and automatically cascades to backup models if a 503 (high demand) or 429 occurs.
+ */
+async function generateGeminiResponse(prompt: string): Promise<string> {
+  const primaryModel = process.env.GEMINI_MODEL || "models/gemini-3.6-flash";
+  const modelCandidates = [
+    primaryModel,
+    "models/gemini-3.7-flash",
+    "models/gemini-3.5-flash",
+    "gemini-3.1-pro",
+  ];
+
+  // Deduplicate candidate queue while preserving order
+  const modelQueue = Array.from(new Set(modelCandidates));
+  let lastError: any = null;
+
+  for (const model of modelQueue) {
+    try {
+      console.log(`🤖 Requesting Gemini inference using: ${model}`);
+      const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+      });
+
+      if (response.text) {
+        return response.text;
+      }
+    } catch (err: any) {
+      console.warn(
+        `⚠️ Model "${model}" failed with status ${err?.status || "ERR"}: ${err?.message || err}. Cascading to next fallback...`,
+      );
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error("All Gemini model endpoints failed to respond.");
 }
 
 export async function getChats(req: AuthRequest, res: Response) {
