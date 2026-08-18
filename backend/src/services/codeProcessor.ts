@@ -5,6 +5,7 @@ import os from "os";
 import { Job } from "bullmq";
 import { qdrantClient, COLLECTION_NAME } from "../config/qdrant";
 import { getIO } from "../config/socket";
+import { generateEmbeddings } from "./embeddingService";
 
 // Extensive skip arrays to ignore irrelevant noise
 const IGNORED_DIRECTORIES = new Set([
@@ -45,31 +46,7 @@ interface CodeChunk {
   endLine: number;
 }
 
-// Singleton variable to cache the local embedding model execution pipeline instance
-let embeddingPipelineInstance: any = null;
-
-/**
- * Lazy-loads and caches the local open-source embedding pipeline.
- * Model chosen: BAAI/bge-base-en-v1.5
- * Vector Dimension: 768
- * Reason: Top-tier retrieval performance, open-source, runs 100% locally on CPU/GPU.
- */
-async function getEmbeddingPipeline() {
-  if (!embeddingPipelineInstance) {
-    // Dynamic import to cleanly load the ESM transformers library inside standard Node scripts
-    const { pipeline } = await import("@xenova/transformers");
-
-    console.log(
-      "⏳ Loading local embedding model (Xenova/bge-base-en-v1.5)...",
-    );
-    embeddingPipelineInstance = await pipeline(
-      "feature-extraction",
-      "Xenova/bge-base-en-v1.5",
-    );
-    console.log("🚀 Local embedding model loaded successfully.");
-  }
-  return embeddingPipelineInstance;
-}
+const EXPECTED_VECTOR_DIMENSION = 768;
 
 /**
  * Clones a remote GitHub repository to a local temporary folder.
@@ -157,7 +134,8 @@ function sliceCodeIntoChunks(filePath: string, content: string): CodeChunk[] {
 }
 
 /**
- * Batches text blocks out to the local BGE model and loads vectors into Qdrant.
+ * Batches text blocks, generates 768-dim vectors via Hugging Face Serverless API (BAAI/bge-base-en-v1.5),
+ * and upserts points directly into Qdrant.
  */
 export async function generateAndStoreEmbeddings(
   repositoryId: string,
@@ -165,62 +143,64 @@ export async function generateAndStoreEmbeddings(
   job?: Job,
 ) {
   console.log(
-    `🧬 Processing ${chunks.length} chunks via Local BGE Embedding Engine...`,
+    `🧬 Processing ${chunks.length} chunks via Hugging Face Embedding Engine (BAAI/bge-base-en-v1.5, ${EXPECTED_VECTOR_DIMENSION}d)...`,
   );
 
-  console.log("before embedding pipeline");
-  const extractor = await getEmbeddingPipeline();
-  console.log("after embedding pipeline");
-
-  // Processing in batches preserves optimal memory control and limits heap inflation
-  const BATCH_SIZE = 25;
+  const BATCH_SIZE = 40;
+  const totalBatches = Math.ceil(chunks.length / BATCH_SIZE);
 
   for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
-    const batch = chunks.slice(i, i + BATCH_SIZE);
+    const batchChunks = chunks.slice(i, i + BATCH_SIZE);
+    const batchIndex = Math.floor(i / BATCH_SIZE) + 1;
+
     console.log(
-      `📡 Vectorizing batch ${Math.floor(i / BATCH_SIZE) + 1} of ${Math.ceil(chunks.length / BATCH_SIZE)}...`,
+      `📡 Vectorizing batch ${batchIndex} of ${totalBatches} (${batchChunks.length} chunks) via Hugging Face API...`,
     );
 
-    const qdrantPoints = [];
+    // 1. Maintain exact sequential order when extracting text contents
+    const batchContents = batchChunks.map((c) => c.content);
 
-    for (const chunk of batch) {
-      try {
-        // Generate embeddings locally. Mean pooling and normalization match the BGE specification.
-        const output = await extractor(chunk.content, {
-          pooling: "mean",
-          normalize: true,
-        });
+    // 2. Request batch embeddings from Hugging Face Serverless API
+    const vectors = await generateEmbeddings(batchContents);
 
-        // Extract plain array numbers out of the underlying ONNX Tensor object
-        const vectorValue = Array.from(output.data) as number[];
-
-        qdrantPoints.push({
-          id: crypto.randomUUID(),
-          vector: vectorValue,
-          payload: {
-            repositoryId,
-            filePath: chunk.filePath,
-            content: chunk.content,
-            startLine: chunk.startLine,
-            endLine: chunk.endLine,
-          },
-        });
-      } catch (chunkError) {
-        console.error(
-          `❌ Failed to extract embedding vector for file block: ${chunk.filePath}`,
-          chunkError,
-        );
-        throw chunkError;
-      }
+    // 3. CRITICAL Safeguard: Verify returned vectors match chunk count exactly
+    if (vectors.length !== batchChunks.length) {
+      throw new Error(
+        `CRITICAL: Index alignment mismatch in batch ${batchIndex}. Expected ${batchChunks.length} vectors, got ${vectors.length}. Aborting to prevent metadata mispairing.`,
+      );
     }
 
-    // Stream the structural batch points straight to Qdrant
+    // 4. Safely zip vectors[idx] back onto batchChunks[idx] in a single synchronously-scoped step
+    const qdrantPoints = batchChunks.map((chunk, idx) => {
+      const vector = vectors[idx];
+
+      // Verify dimension integrity for each vector in the batch
+      if (!vector || vector.length !== EXPECTED_VECTOR_DIMENSION) {
+        throw new Error(
+          `CRITICAL: Embedding vector dimension mismatch at batch index ${idx}. Expected ${EXPECTED_VECTOR_DIMENSION}, got ${vector ? vector.length : 0}`,
+        );
+      }
+
+      return {
+        id: crypto.randomUUID(),
+        vector,
+        payload: {
+          repositoryId,
+          filePath: chunk.filePath,
+          content: chunk.content,
+          startLine: chunk.startLine,
+          endLine: chunk.endLine,
+        },
+      };
+    });
+
+    // 5. Stream the structural batch points straight to Qdrant
     await qdrantClient.upsert(COLLECTION_NAME, {
       wait: true,
       points: qdrantPoints,
     });
 
-    const processedCount = Math.min(chunks.length, i + batch.length);
+    const processedCount = Math.min(chunks.length, i + batchChunks.length);
     const progress = Math.min(
       95,
       Math.floor(50 + (processedCount / chunks.length) * 45),
@@ -241,6 +221,6 @@ export async function generateAndStoreEmbeddings(
   }
 
   console.log(
-    `🎯 Successfully indexed all local vectors to Qdrant for repo: ${repositoryId}`,
+    `🎯 Successfully indexed ${chunks.length} vectors to Qdrant for repo: ${repositoryId}`,
   );
 }
