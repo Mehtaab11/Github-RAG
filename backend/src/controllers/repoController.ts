@@ -37,37 +37,82 @@ export async function ingestRepository(req: AuthRequest, res: Response) {
       },
     });
 
-    if (repo && repo.userId && repo.userId !== authenticatedUserId) {
-      return res.status(409).json({
-        error: "This repository is already associated with another account.",
-      });
-    }
-
-    if (repo && repo.status === "READY" && !req.body.force) {
-      return res.status(200).json({
-        message: "This repository is already present and being analyzed",
-        repository: repo,
-      });
-    }
-
-    if (!repo) {
-      repo = await prisma.repository.create({
-        data: {
-          githubUrl,
-          name: fullRepoName,
-          status: "PENDING",
+    if (repo) {
+      // Ensure this user has an active conversation / access link to this repository
+      const existingConversation = await prisma.conversation.findFirst({
+        where: {
+          repositoryId: repo.id,
           userId: authenticatedUserId,
         },
       });
-    } else {
+
+      if (!existingConversation) {
+        await prisma.conversation.create({
+          data: {
+            repositoryId: repo.id,
+            userId: authenticatedUserId,
+            title: "New Chat",
+          },
+        });
+      }
+
+      // If repository is already indexed and READY, return immediately (instant access)
+      if (repo.status === "READY" && !req.body.force) {
+        return res.status(200).json({
+          message: "Repository is already indexed and ready in your workspace.",
+          repository: repo,
+        });
+      }
+
+      // If repository is currently being ingested by another process
+      if (
+        (repo.status === "PENDING" || repo.status === "CLONING" || repo.status === "PROCESSING") &&
+        !req.body.force
+      ) {
+        return res.status(200).json({
+          message: "Repository ingestion is currently in progress.",
+          repository: repo,
+        });
+      }
+
+      // If status is FAILED or forced re-indexing was explicitly requested:
       repo = await prisma.repository.update({
         where: { id: repo.id },
         data: {
           status: "PENDING",
-          userId: authenticatedUserId,
         },
       });
+
+      const job = await repoIngestionQueue.add(`ingest-${repo.id}`, {
+        repositoryId: repo.id,
+        githubUrl: repo.githubUrl,
+      });
+
+      return res.status(201).json({
+        message: "Repository submission tracking initiated. Ingestion queued.",
+        repository: repo,
+        jobId: job.id,
+      });
     }
+
+    // New repository creation
+    repo = await prisma.repository.create({
+      data: {
+        githubUrl,
+        name: fullRepoName,
+        status: "PENDING",
+        userId: authenticatedUserId,
+      },
+    });
+
+    // Provision default user conversation
+    await prisma.conversation.create({
+      data: {
+        repositoryId: repo.id,
+        userId: authenticatedUserId,
+        title: "New Chat",
+      },
+    });
 
     const job = await repoIngestionQueue.add(`ingest-${repo.id}`, {
       repositoryId: repo.id,
@@ -94,40 +139,16 @@ export async function getRepository(req: AuthRequest, res: Response) {
       return res.status(401).json({ error: "Unauthorized: Missing user session." });
     }
 
-    let repos = await prisma.repository.findMany({
+    // A user sees any repository they added OR any repository they have an active conversation / study session with
+    const repos = await prisma.repository.findMany({
       where: {
-        userId: authenticatedUserId,
+        OR: [
+          { userId: authenticatedUserId },
+          { conversations: { some: { userId: authenticatedUserId } } },
+        ],
       },
       orderBy: { createdAt: "desc" },
     });
-
-    if (repos.length === 0) {
-      const legacyRepos = await prisma.repository.findMany({
-        where: {
-          userId: null,
-        },
-      });
-
-      if (legacyRepos.length > 0) {
-        await prisma.repository.updateMany({
-          where: {
-            id: {
-              in: legacyRepos.map((repo) => repo.id),
-            },
-          },
-          data: {
-            userId: authenticatedUserId,
-          },
-        });
-
-        repos = await prisma.repository.findMany({
-          where: {
-            userId: authenticatedUserId,
-          },
-          orderBy: { createdAt: "desc" },
-        });
-      }
-    }
 
     return res.status(200).json(repos);
   } catch (error) {
@@ -144,7 +165,10 @@ export async function getAllRepository(req: AuthRequest, res: Response) {
 
     const repos = await prisma.repository.findMany({
       where: {
-        userId: authenticatedUserId,
+        OR: [
+          { userId: authenticatedUserId },
+          { conversations: { some: { userId: authenticatedUserId } } },
+        ],
       },
       orderBy: { createdAt: "desc" },
     });

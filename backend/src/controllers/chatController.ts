@@ -6,6 +6,7 @@ import { prisma } from "../config/db";
 import { Prisma } from "@prisma/client";
 import { AuthRequest } from "../middleware/auth";
 import { buildRepoPrompt } from "../constants/prompts";
+import { generateQueryEmbedding } from "../services/embeddingService";
 
 export async function handleChatMessage(req: AuthRequest, res: Response) {
   try {
@@ -59,22 +60,9 @@ export async function handleChatMessage(req: AuthRequest, res: Response) {
             .join("\n\n")
         : "No prior conversation.";
 
-    // Building the vector of the given message
-    console.log("DEBUG: Building pipeline");
-    const { pipeline } = await import("@xenova/transformers");
-
-    const extractor = await pipeline(
-      "feature-extraction",
-      "Xenova/bge-base-en-v1.5",
-    );
-
-    console.log("DEBUG: Converting Message to vector");
-    const output = await extractor(message, {
-      pooling: "mean",
-      normalize: true,
-    });
-
-    const queryVector = Array.from(output.data) as number[];
+    // Generate query vector via Hugging Face Embedding Engine (BAAI/bge-base-en-v1.5, 768-dim)
+    console.log("DEBUG: Generating query vector via Hugging Face Embedding API");
+    const queryVector = await generateQueryEmbedding(message);
 
     // Search Qdrant for top code snippets matching the query vector within this repository
     console.log("DEBUG: Searching the qdrant");
