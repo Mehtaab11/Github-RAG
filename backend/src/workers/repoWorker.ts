@@ -35,16 +35,23 @@ export function startRepoWorker() {
         return { success: false, reason: "Repository deleted" };
       }
 
+      const emitProgress = (status: string, progress: number, error?: string) => {
+        const payload = { repositoryId, status, progress, error };
+        try {
+          getIO().emit("ingestion-progress", payload);
+          getIO().to(repositoryId).emit("ingestion-progress", payload);
+        } catch (err) {
+          console.warn("Socket emit error:", err);
+        }
+      };
+
       try {
         // 1. Move to CLONING
         await prisma.repository.update({
           where: { id: repositoryId },
           data: { status: "CLONING" },
         });
-        //  Broadcast update to everyone in this repo's socket room
-        getIO()
-          .to(repositoryId)
-          .emit("ingestion-progress", { status: "CLONING", progress: 15 });
+        emitProgress("CLONING", 15);
         await job.updateProgress(15);
 
         // 2. Clone Repository
@@ -55,10 +62,7 @@ export function startRepoWorker() {
           where: { id: repositoryId },
           data: { status: "PROCESSING" },
         });
-        //  Broadcast update
-        getIO()
-          .to(repositoryId)
-          .emit("ingestion-progress", { status: "PROCESSING", progress: 50 });
+        emitProgress("PROCESSING", 50);
         await job.updateProgress(50);
 
         // 4. Scan, Filter, and Chunk
@@ -78,10 +82,7 @@ export function startRepoWorker() {
           where: { id: repositoryId },
           data: { status: "READY" },
         });
-        //  Broadcast ultimate completion
-        getIO()
-          .to(repositoryId)
-          .emit("ingestion-progress", { status: "READY", progress: 100 });
+        emitProgress("READY", 100);
         await job.updateProgress(100);
       } catch (error: any) {
         console.error(`❌ Ingestion Failure inside Job ${job.id}:`, error);
@@ -91,11 +92,7 @@ export function startRepoWorker() {
             data: { status: "FAILED" },
           });
 
-          //  Broadcast catastrophic failure state
-          getIO().to(repositoryId).emit("ingestion-progress", {
-            status: "FAILED",
-            error: error.message,
-          });
+          emitProgress("FAILED", 0, error.message);
         } catch (dbErr) {
           // Ignore if repo record was deleted from database
         }

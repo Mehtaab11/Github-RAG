@@ -211,10 +211,9 @@ export async function generateAndStoreEmbeddings(
     }
 
     try {
-      getIO().to(repositoryId).emit("ingestion-progress", {
-        status: "PROCESSING",
-        progress,
-      });
+      const payload = { repositoryId, status: "PROCESSING", progress };
+      getIO().emit("ingestion-progress", payload);
+      getIO().to(repositoryId).emit("ingestion-progress", payload);
     } catch (socketErr) {
       // Ignore socket emit errors if client disconnected
     }
