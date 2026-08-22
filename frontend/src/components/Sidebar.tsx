@@ -45,6 +45,25 @@ export default function Sidebar() {
     fetchRepos();
   }, [setRepositories]);
 
+  // Auto-refresh polling effect to guarantee live status updates on deployments
+  useEffect(() => {
+    const hasPendingRepo = repositories.some(
+      (r) => r.status !== 'READY' && r.status !== 'FAILED'
+    );
+    if (!hasPendingRepo) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const response = await api.get('/repositories');
+        setRepositories(response.data);
+      } catch (err) {
+        // Silent background sync
+      }
+    }, 3500);
+
+    return () => clearInterval(interval);
+  }, [repositories, setRepositories]);
+
   // Submit ingestion request
   const handleIngestSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

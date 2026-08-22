@@ -79,7 +79,7 @@ export default function ChatWindow() {
         {messages.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-on-surface-variant my-auto text-center">
             <p className="text-sm text-on-surface-variant font-code-sm">
-              Context loaded. Ask a question about this repository codebase.
+              Ask a question about this repository codebase.
             </p>
           </div>
         ) : (

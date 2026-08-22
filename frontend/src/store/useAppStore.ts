@@ -80,13 +80,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     // Listen for live ingestion progress updates pushed by the BullMQ background worker
     socketInstance.on("ingestion-progress", (data) => {
+      const targetRepoId = data.repositoryId || get().activeRepoId;
+
       if (data.status === "READY" || data.progress >= 100) {
         set((state) => ({
           ingestionProgress: null,
           repositories: state.repositories.map((repo) =>
-            repo.id === get().activeRepoId
-              ? { ...repo, status: "READY" }
-              : repo,
+            repo.id === targetRepoId ? { ...repo, status: "READY" } : repo,
           ),
         }));
       } else {
@@ -95,7 +95,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (data.status) {
           set((state) => ({
             repositories: state.repositories.map((repo) =>
-              repo.id === get().activeRepoId
+              repo.id === targetRepoId
                 ? { ...repo, status: data.status }
                 : repo,
             ),
