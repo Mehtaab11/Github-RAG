@@ -101,10 +101,7 @@ export async function handleChatMessage(req: AuthRequest, res: Response) {
     });
 
     // Call Groq LPU LLM with automatic Gemini fallback
-    let assistantAnswer = await generateLLMResponse(systemPrompt);
-
-    // Sanitize any raw <br> or <br/> tags emitted by LLM into clean markdown newlines
-    assistantAnswer = assistantAnswer.replace(/<br\s*\/?>/gi, "\n");
+    const assistantAnswer = await generateLLMResponse(systemPrompt);
 
     console.log("DEBUG: Updating the Prisma Database");
     await prisma.message.create({

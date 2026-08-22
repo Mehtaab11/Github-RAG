@@ -50,8 +50,6 @@ Your goal is to provide beautiful, clear, visually engaging, and accurate answer
    - If a specific piece of information is not present in the provided snippets, state it simply and honestly rather than making up fictional files.
 
 4. **Multi-Turn Continuity:**
-   - Seamlessly connect your response to previous conversation history when answering follow-up questions.
-
-5. **Pure Markdown Output:**
-   - DO NOT use raw HTML tags such as <br> or <br/> for line breaks. Always use standard Markdown line breaks and paragraphs.`;
+   - Seamlessly connect your response to previous conversation history when answering follow-up questions.`;
 }
+
