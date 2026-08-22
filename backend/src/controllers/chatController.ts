@@ -70,13 +70,36 @@ export async function handleChatMessage(req: AuthRequest, res: Response) {
 
     const targetRepoId = conversation.repositoryId as string;
 
-    const searchResults = await qdrantClient.search(COLLECTION_NAME, {
+    let searchResults = await qdrantClient.search(COLLECTION_NAME, {
       vector: queryVector,
       filter: {
         must: [{ key: "repositoryId", match: { value: targetRepoId } }],
       },
       limit: 5,
     });
+
+    // Resilient Fallback: If vector search returns 0 hits, scroll Qdrant for codebase chunks
+    if (searchResults.length === 0) {
+      try {
+        const scrollResult = await qdrantClient.scroll(COLLECTION_NAME, {
+          filter: {
+            must: [{ key: "repositoryId", match: { value: targetRepoId } }],
+          },
+          limit: 5,
+          with_payload: true,
+        });
+        if (scrollResult.points && scrollResult.points.length > 0) {
+          searchResults = scrollResult.points.map((p) => ({
+            id: p.id,
+            version: 0,
+            score: 1.0,
+            payload: p.payload,
+          })) as any;
+        }
+      } catch (scrollErr) {
+        console.warn("Fallback scroll error:", scrollErr);
+      }
+    }
 
     console.log("DEBUG: Preparing the code blocks and file path");
     let contextBlocks = searchResults
