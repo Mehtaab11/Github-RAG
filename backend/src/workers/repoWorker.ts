@@ -38,10 +38,13 @@ export function startRepoWorker() {
       const emitProgress = (status: string, progress: number, error?: string) => {
         const payload = { repositoryId, status, progress, error };
         try {
-          getIO().emit("ingestion-progress", payload);
-          getIO().to(repositoryId).emit("ingestion-progress", payload);
+          const ioInstance = getIO();
+          if (ioInstance) {
+            ioInstance.emit("ingestion-progress", payload);
+            ioInstance.to(repositoryId).emit("ingestion-progress", payload);
+          }
         } catch (err) {
-          console.warn("Socket emit error:", err);
+          // Socket optional
         }
       };
 
