@@ -59,7 +59,7 @@ export default function Sidebar() {
         setRepositories([...repositories, targetRepo]);
       }
 
-      setActiveRepoId(targetRepo.id);
+      await handleSelectRepository(targetRepo.id);
       setIngestionProgress({ status: targetRepo.status || 'PENDING', progress: 10 });
       setGithubUrl('');
       toast.success('Repository submitted for ingestion!');
