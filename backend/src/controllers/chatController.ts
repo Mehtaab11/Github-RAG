@@ -137,7 +137,14 @@ export async function handleChatMessage(req: AuthRequest, res: Response) {
 async function generateLLMResponse(prompt: string): Promise<string> {
   if (process.env.GROQ_API_KEY) {
     try {
-      const groqModel = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+      const rawModel = process.env.GROQ_MODEL
+        ? process.env.GROQ_MODEL.replace(/["']/g, "").trim()
+        : "llama-3.3-70b-versatile";
+      const groqModel =
+        rawModel === "llama-3.3-70b-versatilee"
+          ? "llama-3.3-70b-versatile"
+          : rawModel;
+
       console.log(`⚡ Requesting Groq inference using: ${groqModel}`);
 
       const chatCompletion = await groq.chat.completions.create({
