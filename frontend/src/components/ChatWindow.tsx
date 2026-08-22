@@ -86,6 +86,10 @@ export default function ChatWindow() {
             const isAI =
               msg.role?.toUpperCase() === "ASSISTANT" ||
               msg.role?.toUpperCase() === "BOT";
+            const cleanContent = (msg.content || "").replace(
+              /<br\s*\/?>/gi,
+              "\n",
+            );
 
             return (
               <div key={msg.id} className="w-full">
@@ -222,7 +226,7 @@ export default function ChatWindow() {
                           },
                         }}
                       >
-                        {msg.content}
+                        {cleanContent}
                       </ReactMarkdown>
 
                       {/* Sources */}
