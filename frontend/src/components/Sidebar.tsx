@@ -3,13 +3,13 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import api from '../utils/api';
-import { FolderCode, Plus, Loader2, AlertCircle, CheckCircle2, GitBranch } from 'lucide-react';
 
 export default function Sidebar() {
   const [githubUrl, setGithubUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingRepos, setIsLoadingRepos] = useState(true);
 
-  // Extract relevant states and setters from our Zustand slice
+  // Extract state & setters from Zustand store
   const {
     repositories,
     activeRepoId,
@@ -20,22 +20,22 @@ export default function Sidebar() {
     setMessages,
   } = useAppStore();
 
-  // 1. Fetch existing repositories from our backend database on component mount
+  // Fetch existing repositories
   useEffect(() => {
     async function fetchRepos() {
       try {
-        const response = await api.get('/repositories' , {
-          
-        });
+        const response = await api.get('/repositories');
         setRepositories(response.data);
       } catch (err) {
-        console.error('Failed to populate repository indexing list:', err);
+        console.error('Failed to populate repositories:', err);
+      } finally {
+        setIsLoadingRepos(false);
       }
     }
     fetchRepos();
   }, [setRepositories]);
 
-  // 2. Dispatch a new ingestion job request to the Express API
+  // Submit ingestion request
   const handleIngestSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!githubUrl.trim()) return;
@@ -45,127 +45,116 @@ export default function Sidebar() {
       const response = await api.post('/repositories/ingest', { githubUrl });
       const targetRepo = response.data.repository;
 
-      // Append to local state list if it doesn't exist
       if (!repositories.some((r) => r.id === targetRepo.id)) {
         setRepositories([...repositories, targetRepo]);
       }
 
-      // Set as active repository to bind socket events immediately
       setActiveRepoId(targetRepo.id);
       setGithubUrl('');
     } catch (err: any) {
-      console.error('Network transaction exception:', err);
-      const errMsg = err.response?.data?.error || 'Failed to submit code ingestion payload.';
+      console.error('Network exception:', err);
+      const errMsg = err.response?.data?.error || 'Failed to submit code ingestion.';
       alert(errMsg);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // 3. Handle changing the repository context workspace selection
+  // Select repository
   const handleSelectRepository = async (repoId: string) => {
     setActiveRepoId(repoId);
     setMessages([]);
     setActiveConversationId(null);
 
-    // Fetch or create an active chat session conversation for this repo selection
     try {
       const response = await api.post(`/chat/conversation/${repoId}`);
       setActiveConversationId(response.data.conversationId);
       setMessages(response.data.messages || []);
     } catch (err) {
-      console.error('Failed to provision conversation link context:', err);
+      console.error('Failed to set active conversation:', err);
     }
   };
 
   return (
-    <aside className="w-80 h-screen bg-slate-900 border-r border-slate-800 flex flex-col text-slate-200">
-      {/* Brand Header Header */}
-      <div className="p-4 border-b border-slate-800 flex items-center gap-2">
-        <FolderCode className="w-6 h-6 text-indigo-400" />
-        <h1 className="text-lg font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">
-          CodeRAG Engine
-        </h1>
-      </div>
-
-      {/* URL Submission Block Form */}
-      <form onSubmit={handleIngestSubmit} className="p-4 border-b border-slate-800 space-y-2">
-        <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-          Index New Repository
-        </label>
-        <div className="relative flex items-center">
+    <aside className="flex flex-col h-full w-64 border-r border-outline-variant bg-surface-container-lowest flex-shrink-0 font-body-md select-none p-5 space-y-6">
+      {/* Index Form Section */}
+      <div className="space-y-2">
+        <form onSubmit={handleIngestSubmit} className="space-y-2">
           <input
+            id="repo-ingest-input"
             type="url"
-            placeholder="https://github.com/..."
+            placeholder="GitHub repository URL..."
             value={githubUrl}
             onChange={(e) => setGithubUrl(e.target.value)}
             disabled={isSubmitting}
-            className="w-full bg-slate-950 border border-slate-800 rounded-md py-2 pl-3 pr-10 text-xs focus:outline-none focus:border-indigo-500 text-slate-100 disabled:opacity-50"
+            className="w-full bg-background border border-outline-variant rounded-[2px] px-3 py-2 text-xs font-code-sm text-on-surface outline-none focus:border-primary placeholder:text-outline-variant disabled:opacity-50"
             required
           />
           <button
             type="submit"
             disabled={isSubmitting}
-            className="absolute right-1.5 p-1 text-indigo-400 hover:text-indigo-300 disabled:opacity-50"
+            className="w-full bg-primary text-background font-code-sm text-xs py-2 px-3 rounded-[2px] hover:bg-primary-fixed transition-colors font-medium border-none cursor-pointer disabled:opacity-50"
           >
-            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            {isSubmitting ? 'Ingesting...' : 'Ingest Repository'}
           </button>
-        </div>
-      </form>
+        </form>
+      </div>
 
-      {/* Live Background Progress Banner Card Component */}
+      {/* Ingestion Progress */}
       {ingestionProgress && (
-        <div className="m-4 p-3 bg-slate-950 rounded-lg border border-slate-800 space-y-2 text-xs">
-          <div className="flex items-center justify-between font-medium">
-            <span className="text-indigo-400 flex items-center gap-1">
-              <Loader2 className="w-3 h-3 animate-spin inline" /> {ingestionProgress.status}
-            </span>
-            <span>{ingestionProgress.progress}%</span>
+        <div className="border border-outline-variant bg-surface p-3 rounded-[2px] space-y-2">
+          <div className="flex justify-between items-center text-xs font-code-sm">
+            <span className="text-primary">{ingestionProgress.status || 'Ingesting'}</span>
+            <span className="text-primary">{ingestionProgress.progress}%</span>
           </div>
-          <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+          <div className="h-1 bg-surface-container-high w-full rounded-full overflow-hidden">
             <div
-              className="bg-indigo-500 h-1.5 transition-all duration-300"
+              className="h-full bg-primary transition-all duration-300"
               style={{ width: `${ingestionProgress.progress}%` }}
             />
           </div>
-          {ingestionProgress.error && (
-            <p className="text-red-400 flex items-start gap-1 text-[11px] mt-1">
-              <AlertCircle className="w-3 h-3 shrink-0 mt-0.5" /> {ingestionProgress.error}
-            </p>
-          )}
         </div>
       )}
 
-      {/* Main Repository Navigation Listing Rows */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-1">
-        <p className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-          Ingested Repositories
-        </p>
+      {/* Codebases List */}
+      <div className="flex-1 overflow-y-auto space-y-1 pr-1">
+        <div className="text-xs font-code-sm text-outline mb-3">Repositories</div>
 
-        {repositories.length === 0 ? (
-          <p className="text-slate-500 text-xs px-3 py-4 text-center">No indexed codebases found.</p>
+        {isLoadingRepos ? (
+          <div className="space-y-2">
+            <div className="h-8 bg-surface-container-high animate-pulse rounded-[2px]" />
+            <div className="h-8 bg-surface-container-high animate-pulse rounded-[2px]" />
+          </div>
+        ) : repositories.length === 0 ? (
+          <p className="text-xs font-code-sm text-on-surface-variant py-2">No codebases indexed.</p>
         ) : (
           repositories.map((repo) => {
             const isActive = repo.id === activeRepoId;
+            const isReady = repo.status === 'READY';
+            const isFailed = repo.status === 'FAILED';
+
             return (
               <button
                 key={repo.id}
+                type="button"
                 onClick={() => handleSelectRepository(repo.id)}
-                className={`w-full flex items-center justify-between p-3 rounded-md transition-colors text-left text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 text-slate-300'
-                  }`}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-[2px] transition-colors text-left text-xs font-code-sm cursor-pointer ${
+                  isActive
+                    ? 'bg-surface-container-low border border-outline-variant text-primary font-medium'
+                    : 'hover:bg-surface-container text-on-surface-variant border border-transparent'
+                }`}
               >
-                <div className="flex items-center gap-2 truncate">
-                  <GitBranch className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-500'}`} />
-                  <span className="truncate font-medium">{repo.name}</span>
-                </div>
-
-                {/* Status Badge Indicators */}
-                <span className="shrink-0 ml-2">
-                  {repo.status === 'READY' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
-                  {repo.status === 'FAILED' && <AlertCircle className="w-3.5 h-3.5 text-red-400" />}
-                  {(repo.status === 'CLONING' || repo.status === 'PROCESSING' || repo.status === 'PENDING') && (
-                    <Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin" />
-                  )}
+                <span className="truncate">{repo.name}</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded-[2px] border border-outline-variant ${
+                    isReady
+                      ? 'bg-surface-container text-on-surface-variant'
+                      : isFailed
+                      ? 'bg-error-container text-on-error-container'
+                      : 'bg-surface-container-highest text-primary animate-pulse'
+                  }`}
+                >
+                  {isReady ? 'Ready' : isFailed ? 'Failed' : 'Sync'}
                 </span>
               </button>
             );
@@ -175,3 +164,4 @@ export default function Sidebar() {
     </aside>
   );
 }
+

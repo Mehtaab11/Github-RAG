@@ -2,270 +2,248 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '../store/useAppStore';
-import { Send, Bot, User, FileText, Loader2, Code2, Clipboard, Check } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import api from '../utils/api';
 
 export default function ChatWindow() {
-    const [inputMessage, setInputMessage] = useState('');
-    const [copiedId, setCopiedId] = useState<string | null>(null);
-    const chatBottomRef = useRef<HTMLDivElement>(null);
+  const [inputMessage, setInputMessage] = useState('');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const chatBottomRef = useRef<HTMLDivElement>(null);
 
-    const {
-        activeConversationId,
-        messages,
-        isChatLoading,
-        addMessage,
-        setChatLoading,
-    } = useAppStore();
+  const {
+    activeConversationId,
+    messages,
+    isChatLoading,
+    addMessage,
+    setChatLoading,
+  } = useAppStore();
 
-    // Automatically scroll the viewport down to track new messages as they stream in
-    useEffect(() => {
-        chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages, isChatLoading]);
+  // Scroll to bottom as messages arrive
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isChatLoading]);
 
-    // Dispatch the message payload to the backend RAG router
-    const handleSendMessage = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!inputMessage.trim() || !activeConversationId || isChatLoading) return;
+  // Dispatch message to API
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputMessage.trim() || !activeConversationId || isChatLoading) return;
 
-        const userPayloadMessage = inputMessage.trim();
-        setInputMessage('');
-        setChatLoading(true);
+    const userPayloadMessage = inputMessage.trim();
+    setInputMessage('');
+    setChatLoading(true);
 
-        // 1. Instantly append the User's message to the client view for snappy responsiveness
-        addMessage({
-            id: crypto.randomUUID(),
-            role: 'USER',
-            content: userPayloadMessage,
-        });
+    addMessage({
+      id: crypto.randomUUID(),
+      role: 'USER',
+      content: userPayloadMessage,
+    });
 
-        try {
-            // 2. Query our Express API backend with security headers appended
-            const response = await api.post('/chat/message', {
-                conversationId: activeConversationId,
-                message: userPayloadMessage,
-            });
+    try {
+      const response = await api.post('/chat/message', {
+        conversationId: activeConversationId,
+        message: userPayloadMessage,
+      });
 
-            // 3. Append the AI response along with the source files extracted from Qdrant
-            addMessage({
-                id: crypto.randomUUID(),
-                role: 'ASSISTANT',
-                content: response.data.answer,
-                sources: response.data.sources,
-            });
-        } catch (err: any) {
-            console.error('Chat transaction network exception:', err);
-            const errMsg = err.response?.data?.error || 'The system could not compile an answer.';
-            addMessage({
-                id: crypto.randomUUID(),
-                role: 'ASSISTANT',
-                content: `❌ Error: ${errMsg}`,
-            });
-        } finally {
-            setChatLoading(false);
-        }
-    };
+      addMessage({
+        id: crypto.randomUUID(),
+        role: 'ASSISTANT',
+        content: response.data.answer,
+        sources: response.data.sources,
+      });
+    } catch (err: any) {
+      console.error('Chat error:', err);
+      const errMsg = err.response?.data?.error || 'Could not compile an answer.';
+      addMessage({
+        id: crypto.randomUUID(),
+        role: 'ASSISTANT',
+        content: `Error: ${errMsg}`,
+      });
+    } finally {
+      setChatLoading(false);
+    }
+  };
 
-    // Helper utility to let users easily copy code blocks to their clipboard
-    const handleCopyCode = (codeText: string, blockId: string) => {
-        navigator.clipboard.writeText(codeText);
-        setCopiedId(blockId);
-        setTimeout(() => setCopiedId(null), 2000);
-    };
+  const handleCopyCode = (codeText: string, blockId: string) => {
+    navigator.clipboard.writeText(codeText);
+    setCopiedId(blockId);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
 
-    return (
-        <div className="flex-1 flex flex-col h-full bg-slate-950">
-            {/* 1. Main Messages Stream view */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                {messages.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-2">
-                        <Code2 className="w-8 h-8 text-slate-700 animate-pulse" />
-                        <p className="text-xs">Context loaded. Ask anything about this codebase repository!</p>
-                    </div>
-                ) : (
-                    messages.map((msg) => {
-                        // Case-insensitive so 'assistant', 'ASSISTANT', or 'bot' all render as AI
-                        const isAI = msg.role?.toUpperCase() === 'ASSISTANT' || msg.role?.toUpperCase() === 'BOT';
+  return (
+    <div className="flex-1 flex flex-col h-full bg-background min-w-0 font-body-md relative overflow-hidden">
+      {/* Main Messages Stream Area */}
+      <div className="flex-1 overflow-y-auto p-8 flex flex-col space-y-6 pb-36 max-w-3xl mx-auto w-full scrollbar-hide">
+        {messages.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-on-surface-variant my-auto text-center">
+            <p className="text-sm text-on-surface-variant font-code-sm">
+              Context loaded. Ask a question about this repository codebase.
+            </p>
+          </div>
+        ) : (
+          messages.map((msg) => {
+            const isAI = msg.role?.toUpperCase() === 'ASSISTANT' || msg.role?.toUpperCase() === 'BOT';
 
-                        return (
-                            <div
-                                key={msg.id}
-                                className={`flex gap-4 max-w-4xl mx-auto ${isAI ? 'items-start' : 'items-start flex-row-reverse'}`}
+            return (
+              <div key={msg.id} className="w-full">
+                {isAI ? (
+                  /* Assistant Response */
+                  <div className="space-y-3 w-full">
+                    <div className="text-xs font-code-sm text-primary font-medium">GitGPT</div>
+
+                    <div className="text-on-surface text-sm leading-relaxed space-y-4">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          p: ({ children }) => (
+                            <p className="text-on-surface text-sm leading-relaxed mb-3 last:mb-0">
+                              {children}
+                            </p>
+                          ),
+                          h1: ({ children }) => (
+                            <h1 className="text-base font-bold text-primary mt-4 mb-2 border-b border-outline-variant pb-1">
+                              {children}
+                            </h1>
+                          ),
+                          h2: ({ children }) => (
+                            <h2 className="text-sm font-bold text-primary mt-3 mb-2">
+                              {children}
+                            </h2>
+                          ),
+                          h3: ({ children }) => (
+                            <h3 className="text-xs font-semibold text-primary uppercase mt-2 mb-1">
+                              {children}
+                            </h3>
+                          ),
+                          ul: ({ children }) => (
+                            <ul className="space-y-1 my-2 text-sm pl-4 list-disc text-on-surface">{children}</ul>
+                          ),
+                          ol: ({ children }) => (
+                            <ol className="space-y-1 my-2 text-sm pl-4 list-decimal text-on-surface">{children}</ol>
+                          ),
+                          li: ({ children }) => (
+                            <li className="leading-relaxed text-on-surface">{children}</li>
+                          ),
+                          a: ({ children, href }) => (
+                            <a
+                              href={href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary underline hover:text-primary-fixed"
                             >
-                                {/* Profile Identity Avatar */}
-                                <div
-                                    className={`p-2 rounded-md shrink-0 border ${isAI
-                                        ? 'bg-indigo-950/50 border-indigo-800 text-indigo-400'
-                                        : 'bg-slate-900 border-slate-700 text-slate-300'
-                                        }`}
-                                >
-                                    {isAI ? <Bot className="w-4 h-4" /> : <User className="w-4 h-4" />}
+                              {children}
+                            </a>
+                          ),
+                          strong: ({ children }) => (
+                            <strong className="font-semibold text-primary">{children}</strong>
+                          ),
+                          pre({ children }: any) {
+                            const codeChild = children?.props ?? {};
+                            const className = codeChild.className || '';
+                            const match = /language-(\w+)/.exec(className);
+                            const codeString = String(codeChild.children ?? '').replace(/\n$/, '');
+                            const blockId = `${codeString.length}-${codeString.slice(0, 12)}`;
+
+                            return (
+                              <div className="border border-outline-variant rounded-md overflow-hidden bg-[#09090b] my-4">
+                                <div className="flex items-center justify-between px-4 py-2 border-b border-outline-variant bg-surface-container-low text-xs font-code-sm text-on-surface-variant">
+                                  <span>{match ? match[1] : 'code'}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyCode(codeString, blockId)}
+                                    className="hover:text-primary uppercase bg-transparent border-none cursor-pointer text-[11px]"
+                                  >
+                                    {copiedId === blockId ? 'Copied' : 'Copy'}
+                                  </button>
                                 </div>
-
-                                {/* Message Context Block */}
-                                <div className="space-y-3 flex-1 overflow-hidden">
-                                    <div
-                                        className={`text-sm leading-relaxed rounded-lg p-4 ${isAI
-                                            ? 'bg-slate-900/40 text-slate-200 border border-slate-900/80 shadow-inner'
-                                            : 'bg-indigo-600 text-white font-medium shadow-md'
-                                            }`}
-                                    >
-                                        {isAI ? (
-                                            <ReactMarkdown
-                                                remarkPlugins={[remarkGfm]}
-                                                components={{
-                                                    p: ({ children }) => <p className="mb-4 last:mb-0 text-slate-300">{children}</p>,
-                                                    h1: ({ children }) => <h1 className="text-xl font-bold mt-6 mb-3 text-white border-b border-slate-800 pb-1">{children}</h1>,
-                                                    h2: ({ children }) => <h2 className="text-lg font-bold mt-5 mb-2 text-white">{children}</h2>,
-                                                    h3: ({ children }) => <h3 className="text-base font-semibold mt-4 mb-2 text-indigo-400">{children}</h3>,
-                                                    h4: ({ children }) => <h4 className="text-sm font-semibold mt-3 mb-1 text-slate-200">{children}</h4>,
-                                                    ul: ({ children }) => <ul className="list-disc pl-6 mb-4 space-y-2 text-slate-300">{children}</ul>,
-                                                    ol: ({ children }) => <ol className="list-decimal pl-6 mb-4 space-y-2 text-slate-300">{children}</ol>,
-                                                    li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-                                                    a: ({ children, href }) => (
-                                                        <a
-                                                            href={href}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="text-indigo-400 underline hover:text-indigo-300"
-                                                        >
-                                                            {children}
-                                                        </a>
-                                                    ),
-                                                    strong: ({ children }) => <strong className="font-bold text-white bg-slate-900/50 px-1 rounded">{children}</strong>,
-                                                    blockquote: ({ children }) => (
-                                                        <blockquote className="border-l-2 border-indigo-700 pl-3 my-3 text-slate-400 italic">
-                                                            {children}
-                                                        </blockquote>
-                                                    ),
-                                                    table: ({ children }) => (
-                                                        <div className="overflow-x-auto my-4 rounded-md border border-slate-800">
-                                                            <table className="w-full text-xs">{children}</table>
-                                                        </div>
-                                                    ),
-                                                    thead: ({ children }) => <thead className="bg-slate-900/70">{children}</thead>,
-                                                    th: ({ children }) => <th className="px-3 py-2 text-left font-semibold text-slate-200 border-b border-slate-800">{children}</th>,
-                                                    td: ({ children }) => <td className="px-3 py-2 border-b border-slate-900 text-slate-300 align-top">{children}</td>,
-
-                                                    // Fenced code blocks (```...```) are always wrapped in <pre><code>
-                                                    // by remark, so intercepting at the `pre` level reliably
-                                                    // distinguishes them from inline code spans without needing
-                                                    // the (removed-in-v9) `inline` prop.
-                                                    pre({ children }: any) {
-                                                        const codeChild = children?.props ?? {};
-                                                        const className = codeChild.className || '';
-                                                        const match = /language-(\w+)/.exec(className);
-                                                        const codeString = String(codeChild.children ?? '').replace(/\n$/, '');
-                                                        const blockId = `${codeString.length}-${codeString.slice(0, 12)}`;
-
-                                                        return (
-                                                            <div className="my-4 rounded-md border border-slate-800 bg-slate-950 overflow-hidden shadow-2xl">
-                                                                <div className="flex items-center justify-between px-4 py-2 bg-slate-900/80 border-b border-slate-800/60 text-xs text-slate-400 font-mono">
-                                                                    <span>{match ? match[1] : 'source'}</span>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => handleCopyCode(codeString, blockId)}
-                                                                        className="flex items-center gap-1 hover:text-white transition-colors"
-                                                                    >
-                                                                        {copiedId === blockId ? (
-                                                                            <>
-                                                                                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                                                                                <span className="text-emerald-400 font-medium">Copied!</span>
-                                                                            </>
-                                                                        ) : (
-                                                                            <>
-                                                                                <Clipboard className="w-3.5 h-3.5" />
-                                                                                <span>Copy</span>
-                                                                            </>
-                                                                        )}
-                                                                    </button>
-                                                                </div>
-                                                                <pre className="p-4 overflow-x-auto font-mono text-xs text-emerald-400/90 bg-slate-950/60 leading-relaxed selection:bg-indigo-500/30">
-                                                                    <code>{codeString}</code>
-                                                                </pre>
-                                                            </div>
-                                                        );
-                                                    },
-
-                                                    // Only ever reached for inline code spans (`like this`),
-                                                    // since block code is intercepted by `pre` above.
-                                                    code({ children }: any) {
-                                                        return (
-                                                            <code className="bg-slate-900 border border-slate-800 text-indigo-300 px-1.5 py-0.5 rounded font-mono text-xs mx-0.5 break-words">
-                                                                {children}
-                                                            </code>
-                                                        );
-                                                    },
-                                                }}
-                                            >
-                                                {msg.content}
-                                            </ReactMarkdown>
-                                        ) : (
-                                            <span className="whitespace-pre-wrap">{msg.content}</span>
-                                        )}
-                                    </div>
-
-                                    {/* Cited Semantic Reference Badges */}
-                                    {isAI && msg.sources && msg.sources.length > 0 && (
-                                        <div className="space-y-1.5 pl-1">
-                                            <p className="text-[10px] uppercase font-bold tracking-wider text-slate-500 flex items-center gap-1">
-                                                <FileText className="w-3 h-3" /> Grounded Source References:
-                                            </p>
-                                            <div className="flex flex-wrap gap-1.5">
-                                                {msg.sources.map((src, i) => (
-                                                    <span
-                                                        key={i}
-                                                        className="bg-slate-900 border border-slate-800 text-slate-400 px-2 py-0.5 rounded text-[11px] font-mono truncate max-w-xs hover:border-slate-700 transition-colors cursor-help"
-                                                        title={src}
-                                                    >
-                                                        {src.split('/').pop()} {/* Displays file name only */}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
+                                <div className="p-4 overflow-x-auto bg-[#09090b]">
+                                  <pre className="font-code-sm text-xs leading-relaxed text-[#e5e1e4] m-0">
+                                    <code>{codeString}</code>
+                                  </pre>
                                 </div>
-                            </div>
-                        );
-                    })
-                )}
+                              </div>
+                            );
+                          },
+                          code({ children }: any) {
+                            return (
+                              <code className="font-code-sm text-xs bg-surface-container px-1.5 py-0.5 rounded border border-outline-variant text-on-surface font-mono">
+                                {children}
+                              </code>
+                            );
+                          },
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
 
-                {/* Loading Bubble Indicator */}
-                {isChatLoading && (
-                    <div className="flex gap-4 max-w-4xl mx-auto items-start">
-                        <div className="p-2 rounded-md bg-indigo-950/50 border border-indigo-800 text-indigo-400 shrink-0">
-                            <Loader2 className="w-4 h-4 animate-spin" />
+                      {/* Sources */}
+                      {msg.sources && msg.sources.length > 0 && (
+                        <div className="pt-2 border-t border-outline-variant space-y-1">
+                          <div className="text-[11px] font-code-sm text-outline">Sources:</div>
+                          <div className="flex flex-wrap gap-2">
+                            {msg.sources.map((src, i) => (
+                              <span
+                                key={i}
+                                className="bg-surface-container border border-outline-variant text-on-surface-variant px-2 py-0.5 rounded text-xs font-code-sm truncate max-w-xs"
+                              >
+                                {src.split('/').pop()}
+                              </span>
+                            ))}
+                          </div>
                         </div>
-                        <div className="bg-slate-900/40 border border-slate-900 rounded-lg p-4 text-xs text-slate-400 font-mono flex items-center gap-2">
-                            Analysing codebase and generating a response...
-                        </div>
+                      )}
                     </div>
+                  </div>
+                ) : (
+                  /* User Message */
+                  <div className="flex justify-end w-full">
+                    <div className="max-w-xl bg-surface-container border border-outline-variant p-4 rounded-md text-sm text-on-surface leading-relaxed">
+                      <p className="whitespace-pre-wrap m-0">{msg.content}</p>
+                    </div>
+                  </div>
                 )}
-                <div ref={chatBottomRef} />
-            </div>
+              </div>
+            );
+          })
+        )}
 
-            {/* 2. Message Form Input Footer Tray */}
-            <div className="p-4 bg-slate-900/30 border-t border-slate-900">
-                <form onSubmit={handleSendMessage} className="max-w-4xl mx-auto flex gap-2">
-                    <input
-                        type="text"
-                        placeholder="Ask a question about this repository code architecture..."
-                        value={inputMessage}
-                        onChange={(e) => setInputMessage(e.target.value)}
-                        disabled={isChatLoading}
-                        className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 text-slate-100 placeholder-slate-500 disabled:opacity-50"
-                    />
-                    <button
-                        type="submit"
-                        disabled={isChatLoading || !inputMessage.trim()}
-                        className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-900 text-white px-5 rounded-lg font-medium transition-colors disabled:text-slate-600 border disabled:border-slate-800 border-indigo-600 flex items-center justify-center"
-                    >
-                        <Send className="w-4 h-4" />
-                    </button>
-                </form>
-            </div>
+        {/* Loading Indicator */}
+        {isChatLoading && (
+          <div className="text-xs font-code-sm text-on-surface-variant animate-pulse py-2">
+            Generating response...
+          </div>
+        )}
+        <div ref={chatBottomRef} />
+      </div>
+
+      {/* Minimal Floating Input Tray */}
+      <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-background via-background to-transparent pointer-events-none z-20">
+        <div className="bg-surface border border-outline-variant rounded-md shadow-sm pointer-events-auto max-w-3xl mx-auto w-full p-2 focus-within:border-primary transition-colors">
+          <form onSubmit={handleSendMessage} className="flex items-end gap-2">
+            <textarea
+              placeholder="Ask a question..."
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  handleSendMessage(e);
+                }
+              }}
+              disabled={isChatLoading}
+              rows={2}
+              className="flex-1 bg-transparent border-none resize-none font-code-sm text-sm text-on-surface placeholder:text-outline-variant focus:outline-none p-2 min-h-[44px] max-h-[140px] overflow-y-auto scrollbar-hide disabled:opacity-50"
+            />
+            <button
+              type="submit"
+              disabled={isChatLoading || !inputMessage.trim()}
+              className="bg-primary text-background font-code-sm text-xs px-4 py-2 rounded.md hover:bg-primary-fixed transition-colors font-medium border-none cursor-pointer disabled:opacity-50 mb-1"
+            >
+              Send
+            </button>
+          </form>
         </div>
-    );
+      </div>
+    </div>
+  );
 }
+

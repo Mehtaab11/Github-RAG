@@ -37,7 +37,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   // 3. Prevent page layout flashing while parsing credentials on initial load
   if (!isHydrated) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-400">
+      <div className="flex min-h-screen items-center justify-center bg-surface-container-lowest text-on-surface-variant font-code-sm text-code-sm">
         Initializing workspace security...
       </div>
     );
