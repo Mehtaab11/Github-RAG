@@ -22,13 +22,20 @@ api.interceptors.request.use((config) => {
   return Promise.reject(error);
 });
 
-// Interceptor bounces users out if their token expires (401 Unauthorized or 403 Forbidden)
+// Interceptor bounces users out strictly if their authentication token has expired / is invalid (401 Unauthorized)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-      useAuthStore.getState().logout();
-      window.location.href = '/login'; // Or use your router navigation hook
+    const isAuthEndpoint =
+      error.config?.url?.includes('/auth/login') ||
+      error.config?.url?.includes('/auth/register');
+
+    if (error.response && error.response.status === 401 && !isAuthEndpoint) {
+      const authState = useAuthStore.getState();
+      if (authState.isAuthenticated) {
+        authState.logout();
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

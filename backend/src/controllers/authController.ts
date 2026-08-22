@@ -4,6 +4,8 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { prisma } from "../config/db"; // Adjust to your prisma client path
 import { JWT_SECRET } from "../config/jwt";
+import { AuthRequest } from "../middleware/auth";
+import { qdrantClient, COLLECTION_NAME } from "../config/qdrant";
 
 const isProduction = process.env.NODE_ENV === "production";
 const cookieOptions = {
@@ -76,23 +78,18 @@ export const login = async (req: Request, res: Response) => {
     // Locate the user record
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
-      return res
-        .status(401)
-        .json({
-          error: "Invalid login credentials matching that user profile.",
-        });
+      return res.status(401).json({
+        error: "Invalid login credentials matching that user profile.",
+      });
     }
 
     // Verify password match
     const isPasswordMatch = await bcrypt.compare(password, user.password);
     if (!isPasswordMatch) {
-      return res
-        .status(401)
-        .json({
-          error: "Invalid login credentials matching that user profile.",
-        });
+      return res.status(401).json({
+        error: "Invalid login credentials matching that user profile.",
+      });
     }
-
 
     // Establish a signed security token session
     const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: "7d" });
@@ -118,4 +115,119 @@ export const logout = async (req: Request, res: Response) => {
     maxAge: undefined,
   });
   return res.status(200).json({ message: "Successfully logged out" });
+};
+
+export const getProfile = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res
+        .status(401)
+        .json({ error: "Unauthorized: Missing user session." });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        createdAt: true,
+        _count: {
+          select: { repositories: true },
+        },
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: "User profile not found." });
+    }
+
+    return res.status(200).json({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        createdAt: user.createdAt,
+        repoCount: user._count.repositories,
+      },
+    });
+  } catch (error) {
+    console.error("Get profile error:", error);
+    return res.status(500).json({ error: "Failed to fetch user profile." });
+  }
+};
+
+export const updateProfile = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res
+        .status(401)
+        .json({ error: "Unauthorized: Missing user session." });
+    }
+
+    const { name } = req.body;
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { name },
+      select: { id: true, email: true, name: true },
+    });
+
+    return res.status(200).json({
+      message: "Profile updated successfully.",
+      user: updatedUser,
+    });
+  } catch (error) {
+    console.error("Update profile error:", error);
+    return res.status(500).json({ error: "Failed to update profile." });
+  }
+};
+export const deleteAccount = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res
+        .status(401)
+        .json({ error: "Unauthorized: Missing user session." });
+    }
+
+    // 1. Fetch all repositories owned by user to delete Qdrant vector points
+    const userRepos = await prisma.repository.findMany({
+      where: { userId },
+      select: { id: true },
+    });
+
+    for (const repo of userRepos) {
+      try {
+        await qdrantClient.delete(COLLECTION_NAME, {
+          filter: {
+            must: [{ key: "repositoryId", match: { value: repo.id } }],
+          },
+        });
+      } catch (qdrantErr) {
+        console.warn(`Qdrant deletion warning for repo ${repo.id}:`, qdrantErr);
+      }
+    }
+
+    // 2. Delete User from Prisma (cascading deletes for repos, conversations, messages)
+    await prisma.user.delete({
+      where: { id: userId },
+    });
+
+    // 3. Clear auth cookie
+    res.clearCookie("token", {
+      ...cookieOptions,
+      maxAge: undefined,
+    });
+
+    return res.status(200).json({
+      message:
+        "Account and all associated repository vector data deleted successfully.",
+    });
+  } catch (error) {
+    console.error("Delete account error:", error);
+    return res.status(500).json({ error: "Failed to delete user account." });
+  }
 };

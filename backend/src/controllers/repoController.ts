@@ -2,6 +2,7 @@ import { Response } from "express";
 import { prisma } from "../config/db";
 import { AuthRequest } from "../middleware/auth";
 import { repoIngestionQueue } from "../workers/queue";
+import { qdrantClient, COLLECTION_NAME } from "../config/qdrant";
 
 export async function ingestRepository(req: AuthRequest, res: Response) {
   try {
@@ -83,10 +84,16 @@ export async function ingestRepository(req: AuthRequest, res: Response) {
         },
       });
 
-      const job = await repoIngestionQueue.add(`ingest-${repo.id}`, {
-        repositoryId: repo.id,
-        githubUrl: repo.githubUrl,
-      });
+      const job = await repoIngestionQueue.add(
+        "ingest-repo",
+        {
+          repositoryId: repo.id,
+          githubUrl: repo.githubUrl,
+        },
+        {
+          jobId: `job-${repo.id}-${Date.now()}`,
+        }
+      );
 
       return res.status(201).json({
         message: "Repository submission tracking initiated. Ingestion queued.",
@@ -114,10 +121,16 @@ export async function ingestRepository(req: AuthRequest, res: Response) {
       },
     });
 
-    const job = await repoIngestionQueue.add(`ingest-${repo.id}`, {
-      repositoryId: repo.id,
-      githubUrl: repo.githubUrl,
-    });
+    const job = await repoIngestionQueue.add(
+      "ingest-repo",
+      {
+        repositoryId: repo.id,
+        githubUrl: repo.githubUrl,
+      },
+      {
+        jobId: `job-${repo.id}-${Date.now()}`,
+      }
+    );
 
     return res.status(201).json({
       message: "Repository submission tracking initiated. Ingestion queued.",
@@ -139,7 +152,6 @@ export async function getRepository(req: AuthRequest, res: Response) {
       return res.status(401).json({ error: "Unauthorized: Missing user session." });
     }
 
-    // A user sees any repository they added OR any repository they have an active conversation / study session with
     const repos = await prisma.repository.findMany({
       where: {
         OR: [
@@ -177,3 +189,61 @@ export async function getAllRepository(req: AuthRequest, res: Response) {
     return res.status(500).json({ error: "Failed to fetch repositories" });
   }
 }
+
+export async function deleteRepository(req: AuthRequest, res: Response) {
+  try {
+    const authenticatedUserId = req.user?.id;
+    if (!authenticatedUserId) {
+      return res.status(401).json({ error: "Unauthorized: Missing user session." });
+    }
+
+    const id = (Array.isArray(req.params.id) ? req.params.id[0] : req.params.id) as string;
+
+    const repo = await prisma.repository.findUnique({
+      where: { id },
+    });
+
+    if (!repo) {
+      return res.status(404).json({ error: "Repository not found." });
+    }
+
+    if (repo.userId && repo.userId !== authenticatedUserId) {
+      const userConvo = await prisma.conversation.findFirst({
+        where: { repositoryId: id, userId: authenticatedUserId },
+      });
+      if (!userConvo) {
+        return res.status(403).json({ error: "Forbidden: You do not own this repository." });
+      }
+    }
+
+    // 1. Purge points from Qdrant vector database
+    try {
+      await qdrantClient.delete(COLLECTION_NAME, {
+        filter: {
+          must: [
+            {
+              key: "repositoryId",
+              match: { value: id },
+            },
+          ],
+        },
+      });
+    } catch (qdrantErr) {
+      console.warn(`Qdrant deletion warning for repo ${id}:`, qdrantErr);
+    }
+
+    // 2. Delete database record (cascades to conversations and messages)
+    await prisma.repository.delete({
+      where: { id },
+    });
+
+    return res.status(200).json({
+      message: "Repository and associated vector data deleted successfully.",
+      repositoryId: id,
+    });
+  } catch (error) {
+    console.error("Failed to delete repository:", error);
+    return res.status(500).json({ error: "Internal server error deleting repository." });
+  }
+}
+

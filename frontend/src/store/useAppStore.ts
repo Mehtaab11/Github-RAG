@@ -1,9 +1,9 @@
-import { create } from 'zustand';
-import { io, Socket } from 'socket.io-client';
+import { create } from "zustand";
+import { io, Socket } from "socket.io-client";
 
 interface Message {
   id: string;
-  role: 'USER' | 'ASSISTANT';
+  role: "USER" | "ASSISTANT";
   content: string;
   sources?: string[];
 }
@@ -12,7 +12,7 @@ interface Repository {
   id: string;
   name: string;
   githubUrl: string;
-  status: 'PENDING' | 'CLONING' | 'PROCESSING' | 'READY' | 'FAILED';
+  status: "PENDING" | "CLONING" | "PROCESSING" | "READY" | "FAILED";
 }
 
 interface AppState {
@@ -23,10 +23,14 @@ interface AppState {
   // Repository & Ingestion States
   repositories: Repository[];
   activeRepoId: string | null;
-  ingestionProgress: { status: string; progress: number; error?: string } | null;
+  ingestionProgress: {
+    status: string;
+    progress: number;
+    error?: string;
+  } | null;
   setRepositories: (repos: Repository[]) => void;
   setActiveRepoId: (id: string | null) => void;
-  setIngestionProgress: (progress: AppState['ingestionProgress']) => void;
+  setIngestionProgress: (progress: AppState["ingestionProgress"]) => void;
 
   // Chat/RAG States
   activeConversationId: string | null;
@@ -36,10 +40,14 @@ interface AppState {
   setMessages: (messages: Message[]) => void;
   addMessage: (message: Message) => void;
   setChatLoading: (loading: boolean) => void;
+  removeRepository: (id: string) => void;
 }
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ||
-  (process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api$/, '') : 'http://localhost:5000');
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  (process.env.NEXT_PUBLIC_API_URL
+    ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api$/, "")
+    : "http://localhost:5000");
 
 export const useAppStore = create<AppState>((set, get) => ({
   socket: null,
@@ -55,32 +63,44 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (get().socket) return; // Prevent duplicate initializations
 
     const socketInstance = io(BACKEND_URL, {
-      transports: ['websocket', 'polling'],
+      transports: ["websocket", "polling"],
       withCredentials: true,
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,
     });
 
-    socketInstance.on('connect', () => {
-      console.log('🔌 Connected to live backend WebSocket wrapper.');
+    socketInstance.on("connect", () => {
+      console.log("🔌 Connected to live backend WebSocket wrapper.");
       const activeRepoId = get().activeRepoId;
       if (activeRepoId) {
-        socketInstance.emit('join-repo-room', activeRepoId);
+        socketInstance.emit("join-repo-room", activeRepoId);
       }
     });
 
     // Listen for live ingestion progress updates pushed by the BullMQ background worker
-    socketInstance.on('ingestion-progress', (data) => {
-      set({ ingestionProgress: data });
-      
-      // Automatically update the repository status in our local state list if it changes
-      if (data.status) {
+    socketInstance.on("ingestion-progress", (data) => {
+      if (data.status === "READY" || data.progress >= 100) {
         set((state) => ({
+          ingestionProgress: null,
           repositories: state.repositories.map((repo) =>
-            repo.id === get().activeRepoId ? { ...repo, status: data.status } : repo
+            repo.id === get().activeRepoId
+              ? { ...repo, status: "READY" }
+              : repo,
           ),
         }));
+      } else {
+        set({ ingestionProgress: data });
+
+        if (data.status) {
+          set((state) => ({
+            repositories: state.repositories.map((repo) =>
+              repo.id === get().activeRepoId
+                ? { ...repo, status: data.status }
+                : repo,
+            ),
+          }));
+        }
       }
     });
 
@@ -88,19 +108,34 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setRepositories: (repos) => set({ repositories: repos }),
-  
+
+  removeRepository: (id) =>
+    set((state) => {
+      const updatedRepos = state.repositories.filter((r) => r.id !== id);
+      const isDeletingActive = state.activeRepoId === id;
+      return {
+        repositories: updatedRepos,
+        activeRepoId: isDeletingActive ? null : state.activeRepoId,
+        activeConversationId: isDeletingActive
+          ? null
+          : state.activeConversationId,
+        messages: isDeletingActive ? [] : state.messages,
+      };
+    }),
+
   setActiveRepoId: (id) => {
     set({ activeRepoId: id, ingestionProgress: null });
     // Tell the backend socket server to put us in a specific channel room for this repo
     const { socket } = get();
     if (socket && id) {
-      socket.emit('join-repo-room', id);
+      socket.emit("join-repo-room", id);
     }
   },
 
   setIngestionProgress: (progress) => set({ ingestionProgress: progress }),
   setActiveConversationId: (id) => set({ activeConversationId: id }),
   setMessages: (messages) => set({ messages }),
-  addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
+  addMessage: (message) =>
+    set((state) => ({ messages: [...state.messages, message] })),
   setChatLoading: (loading) => set({ isChatLoading: loading }),
 }));

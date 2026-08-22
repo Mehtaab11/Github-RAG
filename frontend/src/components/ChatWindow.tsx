@@ -78,7 +78,7 @@ export default function ChatWindow() {
         {messages.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-on-surface-variant my-auto text-center">
             <p className="text-sm text-on-surface-variant font-code-sm">
-              Context loaded. Ask a question about this repository codebase.
+              Ask any question about this repository codebase.
             </p>
           </div>
         ) : (
@@ -96,37 +96,37 @@ export default function ChatWindow() {
                       GitGPT
                     </div>
 
-                    <div className="text-on-surface text-sm leading-relaxed space-y-4">
+                    <div className="text-on-surface text-[15px] leading-relaxed space-y-4">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
                           p: ({ children }) => (
-                            <p className="text-on-surface text-sm leading-relaxed mb-3 last:mb-0">
+                            <p className="text-on-surface text-[15px] leading-relaxed mb-3 last:mb-0">
                               {children}
                             </p>
                           ),
                           h1: ({ children }) => (
-                            <h1 className="text-base font-bold text-primary mt-4 mb-2 border-b border-outline-variant pb-1">
+                            <h1 className="text-[18px] font-bold text-primary mt-4 mb-2 border-b border-outline-variant pb-1">
                               {children}
                             </h1>
                           ),
                           h2: ({ children }) => (
-                            <h2 className="text-sm font-bold text-primary mt-3 mb-2">
+                            <h2 className="text-[16px] font-bold text-primary mt-3 mb-2">
                               {children}
                             </h2>
                           ),
                           h3: ({ children }) => (
-                            <h3 className="text-xs font-semibold text-primary uppercase mt-2 mb-1">
+                            <h3 className="text-[14px] font-semibold text-primary uppercase mt-2 mb-1">
                               {children}
                             </h3>
                           ),
                           ul: ({ children }) => (
-                            <ul className="space-y-1 my-2 text-sm pl-4 list-disc text-on-surface">
+                            <ul className="space-y-1.5 my-2 text-[15px] pl-5 list-disc text-on-surface">
                               {children}
                             </ul>
                           ),
                           ol: ({ children }) => (
-                            <ol className="space-y-1 my-2 text-sm pl-4 list-decimal text-on-surface">
+                            <ol className="space-y-1.5 my-2 text-[15px] pl-5 list-decimal text-on-surface">
                               {children}
                             </ol>
                           ),
@@ -134,6 +134,38 @@ export default function ChatWindow() {
                             <li className="leading-relaxed text-on-surface">
                               {children}
                             </li>
+                          ),
+                          table: ({ children }) => (
+                            <div className="overflow-x-auto my-4 border border-outline-variant rounded-md bg-[#131315]">
+                              <table className="w-full text-left border-collapse text-[14px]">
+                                {children}
+                              </table>
+                            </div>
+                          ),
+                          thead: ({ children }) => (
+                            <thead className="bg-surface-container-low border-b border-outline-variant font-code-sm text-xs font-semibold text-primary uppercase">
+                              {children}
+                            </thead>
+                          ),
+                          tbody: ({ children }) => (
+                            <tbody className="divide-y divide-outline-variant/40">
+                              {children}
+                            </tbody>
+                          ),
+                          tr: ({ children }) => (
+                            <tr className="hover:bg-surface-container/50 transition-colors">
+                              {children}
+                            </tr>
+                          ),
+                          th: ({ children }) => (
+                            <th className="px-4 py-3 font-semibold text-primary">
+                              {children}
+                            </th>
+                          ),
+                          td: ({ children }) => (
+                            <td className="px-4 py-3 text-on-surface leading-relaxed border-t border-outline-variant/30">
+                              {children}
+                            </td>
                           ),
                           a: ({ children, href }) => (
                             <a
@@ -216,7 +248,7 @@ export default function ChatWindow() {
                 ) : (
                   /* User Message */
                   <div className="flex justify-end w-full">
-                    <div className="max-w-xl bg-surface-container border border-outline-variant p-4 rounded-md text-sm text-on-surface leading-relaxed">
+                    <div className="max-w-xl bg-surface-container border border-outline-variant p-4 rounded-md text-[15px] text-on-surface leading-relaxed">
                       <p className="whitespace-pre-wrap m-0">{msg.content}</p>
                     </div>
                   </div>
@@ -247,7 +279,8 @@ export default function ChatWindow() {
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
                   handleSendMessage(e);
                 }
               }}

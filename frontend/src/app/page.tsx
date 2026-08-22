@@ -1,24 +1,47 @@
-'use client';
+"use client";
 
-import React, { useEffect } from 'react';
-import { useAppStore } from '../store/useAppStore';
-import Sidebar from '@/components/Sidebar';
-import ChatWindow from '@/components/ChatWindow';
+import React, { useEffect, useState } from "react";
+import { useAppStore } from "../store/useAppStore";
+import Sidebar from "@/components/Sidebar";
+import ChatWindow from "@/components/ChatWindow";
+import { Toaster } from "sonner";
+import api from "@/utils/api";
 
 export default function Home() {
   const initSocket = useAppStore((state) => state.initSocket);
   const activeRepoId = useAppStore((state) => state.activeRepoId);
   const repositories = useAppStore((state) => state.repositories);
+  const [workingSince, setWorkingSince] = useState<string>("");
 
   const activeRepo = repositories.find((r) => r.id === activeRepoId);
 
-  // Mount socket connection
+  // Mount socket connection and fetch member information
   useEffect(() => {
     initSocket();
+    async function fetchAccountDetails() {
+      try {
+        const response = await api.get("/auth/me");
+        if (response.data?.user?.createdAt) {
+          const dateStr = new Date(
+            response.data.user.createdAt,
+          ).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          });
+          setWorkingSince(dateStr);
+        }
+      } catch (err) {
+        // Fallback silently if unauthenticated
+      }
+    }
+    fetchAccountDetails();
   }, [initSocket]);
 
   return (
     <div className="flex flex-col h-screen w-screen bg-surface-container-lowest font-body-md text-on-surface antialiased overflow-hidden select-none">
+      <Toaster theme="dark" position="bottom-right" richColors />
+
       {/* 1. Minimal Top Navigation Bar */}
       <header className="flex justify-between items-center px-6 w-full h-12 z-50 bg-background border-b border-outline-variant flex-shrink-0">
         <div className="flex items-center gap-4">
@@ -27,17 +50,17 @@ export default function Home() {
           </span>
           <span className="text-outline-variant">/</span>
           <span className="font-code-sm text-code-sm text-on-surface-variant truncate max-w-xs">
-            {activeRepo ? activeRepo.name : 'Workspace'}
+            {activeRepo ? activeRepo.name : "Workspace"}
           </span>
         </div>
 
-        {/* Minimal Context Info */}
-        <div className="font-code-sm text-xs text-on-surface-variant">
-          {activeRepo ? (
-            <span className="px-2 py-0.5 rounded-[2px] bg-surface-container border border-outline-variant">
-              {activeRepo.status}
+        {/* User Account Info in Top Right Corner */}
+        <div className="font-code-sm text-xs text-on-surface-variant flex items-center gap-2">
+          {workingSince && (
+            <span className="px-2.5 py-1 rounded-[2px] bg-surface-container border border-outline-variant text-on-surface-variant">
+              Account created: {workingSince}
             </span>
-          ) : null}
+          )}
         </div>
       </header>
 
@@ -55,7 +78,8 @@ export default function Home() {
                 Select a Repository
               </h2>
               <p className="font-body-md text-sm text-on-surface-variant leading-relaxed">
-                Choose an ingested codebase from the sidebar or submit a public GitHub URL to begin asking technical questions.
+                Choose an ingested codebase from the sidebar or submit a public
+                GitHub URL to begin asking technical questions.
               </p>
             </div>
           ) : (
@@ -67,5 +91,3 @@ export default function Home() {
     </div>
   );
 }
-
-

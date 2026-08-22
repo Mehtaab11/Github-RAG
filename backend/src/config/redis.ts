@@ -10,8 +10,10 @@ export const redisConnection: ConnectionOptions = process.env.REDIS_URL
   ? {
       url: process.env.REDIS_URL,
       tls: process.env.REDIS_URL.startsWith("rediss://") ? {} : undefined,
+      maxRetriesPerRequest: null,
     }
   : {
       host: process.env.REDIS_HOST || "localhost",
       port: parseInt(process.env.REDIS_PORT || "6379", 10),
+      maxRetriesPerRequest: null,
     };
