@@ -1,10 +1,16 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ||
+const rawApiUrl =
+  process.env.NEXT_PUBLIC_API_URL ||
   (process.env.NEXT_PUBLIC_BACKEND_URL
-    ? `${process.env.NEXT_PUBLIC_BACKEND_URL.replace(/\/$/, '')}/api`
-    : 'http://localhost:5000/api');
+    ? process.env.NEXT_PUBLIC_BACKEND_URL
+    : "http://localhost:5000");
+
+const cleanApiUrl = rawApiUrl.replace(/\/$/, "");
+const apiBaseUrl = cleanApiUrl.endsWith("/api")
+  ? cleanApiUrl
+  : `${cleanApiUrl}/api`;
 
 const api = axios.create({
   baseURL: apiBaseUrl,

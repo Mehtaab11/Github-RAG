@@ -16,16 +16,28 @@ const server = http.createServer(app);
 
 const PORT = process.env.PORT || 5000;
 
-const allowedOrigins = (process.env.FRONTEND_URL || process.env.ALLOWED_ORIGINS || "http://localhost:3000")
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean)
-  .concat("http://localhost:3000");
+export function isOriginAllowed(origin: string | undefined): boolean {
+  if (!origin) return true;
+  const configured = (process.env.FRONTEND_URL || process.env.ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
+
+  if (
+    origin.includes("localhost") ||
+    origin.includes("127.0.0.1") ||
+    origin.endsWith(".vercel.app") ||
+    configured.includes(origin)
+  ) {
+    return true;
+  }
+  return false;
+}
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (isOriginAllowed(origin)) {
         callback(null, true);
         return;
       }
