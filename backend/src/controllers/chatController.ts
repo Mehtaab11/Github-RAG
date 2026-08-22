@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 
 import { ai } from "../config/gemini";
+import { groq } from "../config/groq";
 import { qdrantClient, COLLECTION_NAME } from "../config/qdrant";
 import { prisma } from "../config/db";
 import { Prisma } from "@prisma/client";
@@ -31,7 +32,7 @@ export async function handleChatMessage(req: AuthRequest, res: Response) {
     const conversation = await prisma.conversation.findFirst({
       where: {
         id: conversationId,
-        userId: userId, // 👈 Cross-tenant access protection
+        userId: userId, // Cross-tenant access protection
       },
       include: {
         repository: true,
@@ -94,8 +95,8 @@ export async function handleChatMessage(req: AuthRequest, res: Response) {
       message,
     });
 
-    // Call Gemini with automatic fallback on 503/429 high demand spikes
-    const assistantAnswer = await generateGeminiResponse(systemPrompt);
+    // Call Groq LPU LLM with automatic Gemini fallback
+    const assistantAnswer = await generateLLMResponse(systemPrompt);
 
     console.log("DEBUG: Updating the Prisma Database");
     await prisma.message.create({
@@ -126,6 +127,38 @@ export async function handleChatMessage(req: AuthRequest, res: Response) {
       .status(500)
       .json({ error: "An internal exception occurred during RAG generation." });
   }
+}
+
+/**
+ * High-performance LLM Response Orchestrator.
+ * Tries Groq LPU (llama-3.3-70b-versatile) for ultra-fast sub-second inference.
+ * Automatically falls back to Gemini if GROQ_API_KEY is not configured or rate-limited.
+ */
+async function generateLLMResponse(prompt: string): Promise<string> {
+  if (process.env.GROQ_API_KEY) {
+    try {
+      const groqModel = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+      console.log(`⚡ Requesting Groq inference using: ${groqModel}`);
+
+      const chatCompletion = await groq.chat.completions.create({
+        messages: [{ role: "user", content: prompt }],
+        model: groqModel,
+        temperature: 0.2,
+      });
+
+      const responseText = chatCompletion.choices[0]?.message?.content;
+      if (responseText) {
+        return responseText;
+      }
+    } catch (groqErr: any) {
+      console.warn(
+        `⚠️ Groq API request failed (${groqErr?.message || groqErr}). Cascading to Gemini fallback queue...`,
+      );
+    }
+  }
+
+  // Fallback to Gemini if Groq is unconfigured or failed
+  return await generateGeminiResponse(prompt);
 }
 
 /**
