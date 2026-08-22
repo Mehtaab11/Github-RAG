@@ -131,40 +131,49 @@ export async function handleChatMessage(req: AuthRequest, res: Response) {
 
 /**
  * High-performance LLM Response Orchestrator.
- * Tries Groq LPU (llama-3.3-70b-versatile) for ultra-fast sub-second inference.
+ * Tries Groq LPU models (groq/compound, groq/compound-mini, openai/gpt-oss-120b) for sub-second inference.
  * Automatically falls back to Gemini if GROQ_API_KEY is not configured or rate-limited.
  */
 async function generateLLMResponse(prompt: string): Promise<string> {
   if (process.env.GROQ_API_KEY) {
-    try {
-      const rawModel = process.env.GROQ_MODEL
-        ? process.env.GROQ_MODEL.replace(/["']/g, "").trim()
-        : "llama-3.3-70b-versatile";
-      const groqModel =
-        rawModel === "llama-3.3-70b-versatilee"
-          ? "llama-3.3-70b-versatile"
-          : rawModel;
+    const rawModel = process.env.GROQ_MODEL
+      ? process.env.GROQ_MODEL.replace(/["']/g, "").trim()
+      : "groq/compound";
 
-      console.log(`⚡ Requesting Groq inference using: ${groqModel}`);
+    const groqCandidates = Array.from(
+      new Set([
+        rawModel,
+        "groq/compound",
+        "groq/compound-mini",
+        "openai/gpt-oss-120b",
+        "qwen/qwen3.6-27b",
+        "llama-3.3-70b-versatile",
+      ]),
+    );
 
-      const chatCompletion = await groq.chat.completions.create({
-        messages: [{ role: "user", content: prompt }],
-        model: groqModel,
-        temperature: 0.2,
-      });
+    for (const model of groqCandidates) {
+      try {
+        console.log(`⚡ Requesting Groq inference using: ${model}`);
 
-      const responseText = chatCompletion.choices[0]?.message?.content;
-      if (responseText) {
-        return responseText;
+        const chatCompletion = await groq.chat.completions.create({
+          messages: [{ role: "user", content: prompt }],
+          model,
+          temperature: 0.2,
+        });
+
+        const responseText = chatCompletion.choices[0]?.message?.content;
+        if (responseText) {
+          return responseText;
+        }
+      } catch (groqErr: any) {
+        console.warn(
+          `⚠️ Groq Model "${model}" failed (${groqErr?.message || groqErr}). Trying next Groq candidate...`,
+        );
       }
-    } catch (groqErr: any) {
-      console.warn(
-        `⚠️ Groq API request failed (${groqErr?.message || groqErr}). Cascading to Gemini fallback queue...`,
-      );
     }
   }
 
-  // Fallback to Gemini if Groq is unconfigured or failed
+  // Fallback to Gemini if Groq is unconfigured or all candidates failed
   return await generateGeminiResponse(prompt);
 }
 
