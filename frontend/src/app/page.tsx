@@ -1,62 +1,90 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import Sidebar from '@/components/Sidebar';
-import { Terminal } from 'lucide-react';
 import ChatWindow from '@/components/ChatWindow';
 
 export default function Home() {
   const initSocket = useAppStore((state) => state.initSocket);
   const activeRepoId = useAppStore((state) => state.activeRepoId);
   const repositories = useAppStore((state) => state.repositories);
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   const activeRepo = repositories.find((r) => r.id === activeRepoId);
 
-  // Mount the live socket layer immediately when the client dashboard app spins up
+  // Mount socket connection and theme
   useEffect(() => {
     initSocket();
+    const savedTheme = (localStorage.getItem('theme') as 'dark' | 'light') || 'dark';
+    setTheme(savedTheme);
+    document.documentElement.classList.toggle('dark', savedTheme === 'dark');
   }, [initSocket]);
 
-  return (
-    <main className="flex w-screen h-screen overflow-hidden bg-slate-950 font-sans">
-      {/* 1. Sidebar Control Panel Navigation */}
-      <Sidebar />
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    localStorage.setItem('theme', newTheme);
+    document.documentElement.classList.toggle('dark', newTheme === 'dark');
+  };
 
-      {/* 2. Chat/Workspace View Container */}
-      <section className="flex-1 h-full flex flex-col bg-slate-950 text-slate-100">
-        {!activeRepoId ? (
-          // Placeholder State when no repository workspace context has been focused
-          <div className="flex-1 flex flex-col items-center justify-center space-y-4 p-8 text-center">
-            <div className="p-4 bg-slate-900 border border-slate-800 rounded-full text-indigo-400 shadow-xl">
-              <Terminal className="w-10 h-10" />
-            </div>
-            <div className="max-w-md space-y-1">
-              <h2 className="text-lg font-bold text-slate-200">Select a Codebase Workspace</h2>
-              <p className="text-slate-400 text-sm">
-                Choose an ingested repository from the sidebar or drop a public GitHub link to start asking contextual questions.
+  return (
+    <div className="flex flex-col h-screen w-screen bg-surface-container-lowest font-body-md text-on-surface antialiased overflow-hidden select-none">
+      {/* 1. Minimal Top Navigation Bar */}
+      <header className="flex justify-between items-center px-6 w-full h-12 z-50 bg-background border-b border-outline-variant flex-shrink-0">
+        <div className="flex items-center gap-4">
+          <span className="font-headline-md text-headline-md font-bold text-primary tracking-tight">
+            GitGPT
+          </span>
+          <span className="text-outline-variant">/</span>
+          <span className="font-code-sm text-code-sm text-on-surface-variant truncate max-w-xs">
+            {activeRepo ? activeRepo.name : 'Workspace'}
+          </span>
+        </div>
+
+        {/* Right Section with Status & Theme Toggle */}
+        <div className="flex items-center gap-3 font-code-sm text-xs text-on-surface-variant">
+          {activeRepo ? (
+            <span className="px-2 py-0.5 rounded-[2px] bg-surface-container border border-outline-variant">
+              {activeRepo.status}
+            </span>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="px-2.5 py-1 rounded-[2px] bg-surface-container border border-outline-variant hover:border-primary text-on-surface transition-colors cursor-pointer text-xs font-code-sm uppercase"
+          >
+            {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+          </button>
+        </div>
+      </header>
+
+      {/* 2. Main Workspace Layout */}
+      <main className="flex-1 flex overflow-hidden w-full h-[calc(100vh-48px)]">
+        {/* Left Sidebar */}
+        <Sidebar />
+
+        {/* Central Chat Workspace Section */}
+        <section className="flex-1 h-full flex flex-col bg-background text-on-surface min-w-0">
+          {!activeRepoId ? (
+            /* Minimal Empty State */
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center my-auto max-w-lg mx-auto space-y-3">
+              <h2 className="font-headline-md text-lg font-semibold text-primary">
+                Select a Repository
+              </h2>
+              <p className="font-body-md text-sm text-on-surface-variant leading-relaxed">
+                Choose an ingested codebase from the sidebar or submit a public GitHub URL to begin asking technical questions.
               </p>
             </div>
-          </div>
-        ) : (
-          // Temporary placeholder panel layout where our core chat component will snap in next
-          <div className="flex-1 flex flex-col h-full">
-            {/* Header Workspace Title Bar */}
-            <div className="p-4 bg-slate-900/50 border-b border-slate-800 flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-200">{activeRepo?.name}</h2>
-                <p className="text-[11px] text-slate-500 truncate max-w-xl">{activeRepo?.githubUrl}</p>
-              </div>
-              <div className="px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-medium text-slate-400 uppercase tracking-wide">
-                Active Session
-              </div>
-            </div>
-
-            {/* Chat Body Workspace Placeholder */}
+          ) : (
+            /* Active Workspace Chat Window */
             <ChatWindow />
-          </div>
-        )}
-      </section>
-    </main>
+          )}
+        </section>
+      </main>
+    </div>
   );
 }
+
+
