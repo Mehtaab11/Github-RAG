@@ -75,14 +75,19 @@ export async function handleChatMessage(req: AuthRequest, res: Response) {
       filter: {
         must: [{ key: "repositoryId", match: { value: targetRepoId } }],
       },
-      limit: 7,
+      limit: 5,
     });
 
     console.log("DEBUG: Preparing the code blocks and file path");
-    const contextBlocks = searchResults
+    let contextBlocks = searchResults
       .map((hit) => hit.payload?.content)
       .filter(Boolean)
       .join("\n\n---\n\n");
+
+    // Truncate context to ~6,000 characters to fit within Groq token limits cleanly
+    if (contextBlocks.length > 6000) {
+      contextBlocks = contextBlocks.slice(0, 6000) + "\n\n...[Context Truncated]";
+    }
 
     const uniqueSources = Array.from(
       new Set(searchResults.map((hit) => hit.payload?.filePath)),
