@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import Sidebar from '@/components/Sidebar';
 import ChatWindow from '@/components/ChatWindow';
@@ -9,24 +9,13 @@ export default function Home() {
   const initSocket = useAppStore((state) => state.initSocket);
   const activeRepoId = useAppStore((state) => state.activeRepoId);
   const repositories = useAppStore((state) => state.repositories);
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   const activeRepo = repositories.find((r) => r.id === activeRepoId);
 
-  // Mount socket connection and theme
+  // Mount socket connection
   useEffect(() => {
     initSocket();
-    const savedTheme = (localStorage.getItem('theme') as 'dark' | 'light') || 'dark';
-    setTheme(savedTheme);
-    document.documentElement.classList.toggle('dark', savedTheme === 'dark');
   }, [initSocket]);
-
-  const toggleTheme = () => {
-    const newTheme = theme === 'dark' ? 'light' : 'dark';
-    setTheme(newTheme);
-    localStorage.setItem('theme', newTheme);
-    document.documentElement.classList.toggle('dark', newTheme === 'dark');
-  };
 
   return (
     <div className="flex flex-col h-screen w-screen bg-surface-container-lowest font-body-md text-on-surface antialiased overflow-hidden select-none">
@@ -42,21 +31,13 @@ export default function Home() {
           </span>
         </div>
 
-        {/* Right Section with Status & Theme Toggle */}
-        <div className="flex items-center gap-3 font-code-sm text-xs text-on-surface-variant">
+        {/* Minimal Context Info */}
+        <div className="font-code-sm text-xs text-on-surface-variant">
           {activeRepo ? (
             <span className="px-2 py-0.5 rounded-[2px] bg-surface-container border border-outline-variant">
               {activeRepo.status}
             </span>
           ) : null}
-
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className="px-2.5 py-1 rounded-[2px] bg-surface-container border border-outline-variant hover:border-primary text-on-surface transition-colors cursor-pointer text-xs font-code-sm uppercase"
-          >
-            {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
-          </button>
         </div>
       </header>
 
