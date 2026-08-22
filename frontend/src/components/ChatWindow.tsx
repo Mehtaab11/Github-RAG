@@ -1,13 +1,13 @@
-'use client';
+"use client";
 
-import React, { useState, useRef, useEffect } from 'react';
-import { useAppStore } from '../store/useAppStore';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import api from '../utils/api';
+import React, { useState, useRef, useEffect } from "react";
+import { useAppStore } from "../store/useAppStore";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import api from "../utils/api";
 
 export default function ChatWindow() {
-  const [inputMessage, setInputMessage] = useState('');
+  const [inputMessage, setInputMessage] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
@@ -21,7 +21,7 @@ export default function ChatWindow() {
 
   // Scroll to bottom as messages arrive
   useEffect(() => {
-    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isChatLoading]);
 
   // Dispatch message to API
@@ -30,33 +30,34 @@ export default function ChatWindow() {
     if (!inputMessage.trim() || !activeConversationId || isChatLoading) return;
 
     const userPayloadMessage = inputMessage.trim();
-    setInputMessage('');
+    setInputMessage("");
     setChatLoading(true);
 
     addMessage({
       id: crypto.randomUUID(),
-      role: 'USER',
+      role: "USER",
       content: userPayloadMessage,
     });
 
     try {
-      const response = await api.post('/chat/message', {
+      const response = await api.post("/chat/message", {
         conversationId: activeConversationId,
         message: userPayloadMessage,
       });
 
       addMessage({
         id: crypto.randomUUID(),
-        role: 'ASSISTANT',
+        role: "ASSISTANT",
         content: response.data.answer,
         sources: response.data.sources,
       });
     } catch (err: any) {
-      console.error('Chat error:', err);
-      const errMsg = err.response?.data?.error || 'Could not compile an answer.';
+      console.error("Chat error:", err);
+      const errMsg =
+        err.response?.data?.error || "Could not compile an answer.";
       addMessage({
         id: crypto.randomUUID(),
-        role: 'ASSISTANT',
+        role: "ASSISTANT",
         content: `Error: ${errMsg}`,
       });
     } finally {
@@ -82,14 +83,18 @@ export default function ChatWindow() {
           </div>
         ) : (
           messages.map((msg) => {
-            const isAI = msg.role?.toUpperCase() === 'ASSISTANT' || msg.role?.toUpperCase() === 'BOT';
+            const isAI =
+              msg.role?.toUpperCase() === "ASSISTANT" ||
+              msg.role?.toUpperCase() === "BOT";
 
             return (
               <div key={msg.id} className="w-full">
                 {isAI ? (
                   /* Assistant Response */
                   <div className="space-y-3 w-full">
-                    <div className="text-xs font-code-sm text-primary font-medium">GitGPT</div>
+                    <div className="text-xs font-code-sm text-primary font-medium">
+                      GitGPT
+                    </div>
 
                     <div className="text-on-surface text-sm leading-relaxed space-y-4">
                       <ReactMarkdown
@@ -116,13 +121,19 @@ export default function ChatWindow() {
                             </h3>
                           ),
                           ul: ({ children }) => (
-                            <ul className="space-y-1 my-2 text-sm pl-4 list-disc text-on-surface">{children}</ul>
+                            <ul className="space-y-1 my-2 text-sm pl-4 list-disc text-on-surface">
+                              {children}
+                            </ul>
                           ),
                           ol: ({ children }) => (
-                            <ol className="space-y-1 my-2 text-sm pl-4 list-decimal text-on-surface">{children}</ol>
+                            <ol className="space-y-1 my-2 text-sm pl-4 list-decimal text-on-surface">
+                              {children}
+                            </ol>
                           ),
                           li: ({ children }) => (
-                            <li className="leading-relaxed text-on-surface">{children}</li>
+                            <li className="leading-relaxed text-on-surface">
+                              {children}
+                            </li>
                           ),
                           a: ({ children, href }) => (
                             <a
@@ -135,25 +146,31 @@ export default function ChatWindow() {
                             </a>
                           ),
                           strong: ({ children }) => (
-                            <strong className="font-semibold text-primary">{children}</strong>
+                            <strong className="font-semibold text-primary">
+                              {children}
+                            </strong>
                           ),
                           pre({ children }: any) {
                             const codeChild = children?.props ?? {};
-                            const className = codeChild.className || '';
+                            const className = codeChild.className || "";
                             const match = /language-(\w+)/.exec(className);
-                            const codeString = String(codeChild.children ?? '').replace(/\n$/, '');
+                            const codeString = String(
+                              codeChild.children ?? "",
+                            ).replace(/\n$/, "");
                             const blockId = `${codeString.length}-${codeString.slice(0, 12)}`;
 
                             return (
                               <div className="border border-outline-variant rounded-md overflow-hidden bg-[#09090b] my-4">
                                 <div className="flex items-center justify-between px-4 py-2 border-b border-outline-variant bg-surface-container-low text-xs font-code-sm text-on-surface-variant">
-                                  <span>{match ? match[1] : 'code'}</span>
+                                  <span>{match ? match[1] : "code"}</span>
                                   <button
                                     type="button"
-                                    onClick={() => handleCopyCode(codeString, blockId)}
+                                    onClick={() =>
+                                      handleCopyCode(codeString, blockId)
+                                    }
                                     className="hover:text-primary uppercase bg-transparent border-none cursor-pointer text-[11px]"
                                   >
-                                    {copiedId === blockId ? 'Copied' : 'Copy'}
+                                    {copiedId === blockId ? "Copied" : "Copy"}
                                   </button>
                                 </div>
                                 <div className="p-4 overflow-x-auto bg-[#09090b]">
@@ -179,14 +196,16 @@ export default function ChatWindow() {
                       {/* Sources */}
                       {msg.sources && msg.sources.length > 0 && (
                         <div className="pt-2 border-t border-outline-variant space-y-1">
-                          <div className="text-[11px] font-code-sm text-outline">Sources:</div>
+                          <div className="text-[11px] font-code-sm text-outline">
+                            Sources:
+                          </div>
                           <div className="flex flex-wrap gap-2">
                             {msg.sources.map((src, i) => (
                               <span
                                 key={i}
                                 className="bg-surface-container border border-outline-variant text-on-surface-variant px-2 py-0.5 rounded text-xs font-code-sm truncate max-w-xs"
                               >
-                                {src.split('/').pop()}
+                                {src.split("/").pop()}
                               </span>
                             ))}
                           </div>
@@ -219,24 +238,27 @@ export default function ChatWindow() {
       {/* Minimal Floating Input Tray */}
       <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-background via-background to-transparent pointer-events-none z-20">
         <div className="bg-surface border border-outline-variant rounded-md shadow-sm pointer-events-auto max-w-3xl mx-auto w-full p-2 focus-within:border-primary transition-colors">
-          <form onSubmit={handleSendMessage} className="flex items-end gap-2">
+          <form
+            onSubmit={handleSendMessage}
+            className="flex items-center gap-3"
+          >
             <textarea
               placeholder="Ask a question..."
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                   handleSendMessage(e);
                 }
               }}
               disabled={isChatLoading}
               rows={2}
-              className="flex-1 bg-transparent border-none resize-none font-code-sm text-sm text-on-surface placeholder:text-outline-variant focus:outline-none p-2 min-h-[44px] max-h-[140px] overflow-y-auto scrollbar-hide disabled:opacity-50"
+              className="flex-1 bg-transparent border-none resize-none font-code-sm text-sm text-on-surface placeholder:text-outline-variant focus:outline-none px-3 py-2 min-h-[44px] max-h-[140px] leading-relaxed overflow-y-auto scrollbar-hide disabled:opacity-50"
             />
             <button
               type="submit"
               disabled={isChatLoading || !inputMessage.trim()}
-              className="bg-primary text-background font-code-sm text-xs px-4 py-2 rounded.md hover:bg-primary-fixed transition-colors font-medium border-none cursor-pointer disabled:opacity-50 mb-1"
+              className="bg-primary text-background font-code-sm text-xs px-5 py-2.5 rounded-md hover:bg-primary-fixed transition-colors font-medium border-none cursor-pointer disabled:opacity-50 shrink-0 self-center"
             >
               Send
             </button>
@@ -246,4 +268,3 @@ export default function ChatWindow() {
     </div>
   );
 }
-
