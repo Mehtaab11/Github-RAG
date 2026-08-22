@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useAppStore } from "../store/useAppStore";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 import api from "../utils/api";
 
 export default function ChatWindow() {
@@ -78,7 +79,7 @@ export default function ChatWindow() {
         {messages.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-on-surface-variant my-auto text-center">
             <p className="text-sm text-on-surface-variant font-code-sm">
-              Ask any question about this repository codebase.
+              Context loaded. Ask a question about this repository codebase.
             </p>
           </div>
         ) : (
@@ -99,6 +100,7 @@ export default function ChatWindow() {
                     <div className="text-on-surface text-[15px] leading-relaxed space-y-4">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeRaw]}
                         components={{
                           p: ({ children }) => (
                             <p className="text-on-surface text-[15px] leading-relaxed mb-3 last:mb-0">
