@@ -36,9 +36,28 @@ export default function AuthCallbackPage() {
     async function handleAuthCallback() {
       try {
         const searchParams = new URLSearchParams(window.location.search);
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+
+        const oauthError =
+          searchParams.get('error_description') ||
+          searchParams.get('error') ||
+          hashParams.get('error_description') ||
+          hashParams.get('error');
+
+        if (oauthError) {
+          if (isSubscribed) {
+            setError(decodeURIComponent(oauthError.replace(/\+/g, ' ')));
+          }
+          return;
+        }
+
         const code = searchParams.get('code');
         if (code) {
           const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) {
+            if (isSubscribed) setError(error.message);
+            return;
+          }
           if (data?.session && isSubscribed) {
             await syncUserWithBackend(data.session);
             return;
@@ -58,16 +77,14 @@ export default function AuthCallbackPage() {
           }
         });
 
-        // Fallback timeout error if no session received within 6 seconds
-        const timer = setTimeout(() => {
-          if (isSubscribed && !useAuthStore.getState().isAuthenticated) {
-            setError('OAuth authentication timed out. Please verify provider settings in Supabase.');
+        if (!code && !searchParams.get('access_token') && !hashParams.get('access_token')) {
+          if (isSubscribed) {
+            setError('No authentication token received from provider. Please try signing in again.');
           }
-        }, 6000);
+        }
 
         return () => {
           authListener.subscription.unsubscribe();
-          clearTimeout(timer);
         };
       } catch (err: any) {
         console.error('OAuth Callback error:', err);
