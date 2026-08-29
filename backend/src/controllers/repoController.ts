@@ -4,6 +4,84 @@ import { AuthRequest } from "../middleware/auth";
 import { repoIngestionQueue } from "../workers/queue";
 import { qdrantClient, COLLECTION_NAME } from "../config/qdrant";
 
+const RESERVED_GITHUB_PATHS = new Set([
+  "settings",
+  "applications",
+  "features",
+  "pricing",
+  "marketplace",
+  "explore",
+  "trending",
+  "topics",
+  "collections",
+  "events",
+  "sponsor",
+  "sponsors",
+  "organizations",
+  "orgs",
+  "notifications",
+  "login",
+  "join",
+  "logout",
+  "search",
+  "security",
+  "site",
+  "team",
+  "about",
+  "mobile",
+  "customer-stories",
+  "enterprise",
+  "readme",
+  "discussions",
+  "new",
+]);
+
+export function parseAndValidateGithubUrl(urlStr: string): {
+  isValid: boolean;
+  owner?: string;
+  repo?: string;
+  canonicalUrl?: string;
+  error?: string;
+} {
+  try {
+    const trimmed = urlStr.trim();
+    const formattedUrl = trimmed.startsWith("http") ? trimmed : `https://${trimmed}`;
+    const parsed = new URL(formattedUrl);
+
+    if (parsed.hostname !== "github.com" && parsed.hostname !== "www.github.com") {
+      return { isValid: false, error: "URL must be a valid github.com link." };
+    }
+
+    const pathSegments = parsed.pathname.split("/").filter(Boolean);
+    if (pathSegments.length < 2) {
+      return {
+        isValid: false,
+        error: "Please enter a complete GitHub repository URL (e.g., https://github.com/owner/repo).",
+      };
+    }
+
+    const owner = pathSegments[0];
+    const repo = pathSegments[1].replace(/\.git$/, "");
+
+    if (RESERVED_GITHUB_PATHS.has(owner.toLowerCase())) {
+      return {
+        isValid: false,
+        error: `Please enter a valid GitHub repository URL`,
+      };
+    }
+
+    const validNameRegex = /^[A-Za-z0-9_.-]+$/;
+    if (!validNameRegex.test(owner) || !validNameRegex.test(repo)) {
+      return { isValid: false, error: "Invalid repository URL format." };
+    }
+
+    const canonicalUrl = `https://github.com/${owner}/${repo}`;
+    return { isValid: true, owner, repo, canonicalUrl };
+  } catch {
+    return { isValid: false, error: "Invalid URL structure." };
+  }
+}
+
 export async function ingestRepository(req: AuthRequest, res: Response) {
   try {
     const { githubUrl } = req.body;
@@ -14,23 +92,40 @@ export async function ingestRepository(req: AuthRequest, res: Response) {
       });
     }
 
-    const regex = /github\.com\/([^/]+)\/([^/]+)/;
-    const match = githubUrl.match(regex);
-
-    if (!match) {
+    const validation = parseAndValidateGithubUrl(githubUrl);
+    if (!validation.isValid || !validation.canonicalUrl || !validation.owner || !validation.repo) {
       return res.status(400).json({
-        error: "Invalid URL. Please enter a valid GitHub repository link.",
+        error: validation.error || "Invalid GitHub repository link.",
       });
     }
+
+    const { owner, repo: cleanRepoName, canonicalUrl } = validation;
+    const fullRepoName = `${owner}/${cleanRepoName}`;
 
     const authenticatedUserId = req.user?.id;
     if (!authenticatedUserId) {
       return res.status(401).json({ error: "Unauthorized: Missing user session." });
     }
 
-    const owner = match[1];
-    const cleanRepoName = match[2].replace(/\.git$/, "");
-    const fullRepoName = `${owner}/${cleanRepoName}`;
+    // Pre-flight check to verify repository actually exists on GitHub
+    try {
+      const checkRes = await fetch(canonicalUrl, {
+        method: "HEAD",
+        headers: { "User-Agent": "GitGPT-RAG-Checker" },
+      });
+      if (checkRes.status === 404) {
+        return res.status(404).json({
+          error: `GitHub repository '${fullRepoName}' does not exist or is private.`,
+        });
+      }
+      if (!checkRes.ok && checkRes.status !== 301 && checkRes.status !== 302) {
+        return res.status(400).json({
+          error: `Unable to reach GitHub repository '${fullRepoName}' (HTTP ${checkRes.status}).`,
+        });
+      }
+    } catch (netErr) {
+      console.warn("Pre-flight check network notice:", netErr);
+    }
 
     let repo = await prisma.repository.findUnique({
       where: {

@@ -8,12 +8,16 @@ datasource db {
 
 // Track users interacting with the platform
 model User {
-  id        String   @id @default(uuid())
-  password  String
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String   @id @default(uuid())
+  password          String?  // Optional for OAuth users
+  email             String   @unique
+  name              String?
+  provider          String?  @default("credentials") // "credentials", "github", "google"
+  providerId        String?
+  avatarUrl         String?
+  githubAccessToken String?  // Stored for 1-click GitHub repo fetching
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   repositories  Repository[]
   conversations Conversation[]

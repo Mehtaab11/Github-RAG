@@ -131,13 +131,25 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
             />
           </div>
 
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full bg-primary text-on-primary font-code-sm text-xs py-2 px-4 rounded-md hover:bg-primary-fixed transition-colors font-medium border-none cursor-pointer disabled:opacity-50"
-          >
-            {isLoading ? 'Saving...' : 'Save Profile Changes'}
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="flex-1 bg-primary text-on-primary font-code-sm text-xs py-2 px-4 rounded-md hover:bg-primary-fixed transition-colors font-medium border-none cursor-pointer disabled:opacity-50"
+            >
+              {isLoading ? 'Saving...' : 'Save Profile Changes'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                logout();
+                window.location.href = '/login';
+              }}
+              className="bg-surface-container border border-outline-variant text-on-surface hover:text-error hover:border-error font-code-sm text-xs py-2 px-4 rounded-md transition-colors font-medium cursor-pointer"
+            >
+              Log Out
+            </button>
+          </div>
         </form>
 
         {/* Danger Zone */}

@@ -84,6 +84,12 @@ export const login = async (req: Request, res: Response) => {
     }
 
     // Verify password match
+    if (!user.password) {
+      return res.status(401).json({
+        error: "This account was created using OAuth. Please sign in with GitHub or Google.",
+      });
+    }
+
     const isPasswordMatch = await bcrypt.compare(password, user.password);
     if (!isPasswordMatch) {
       return res.status(401).json({
@@ -105,6 +111,63 @@ export const login = async (req: Request, res: Response) => {
     return res
       .status(500)
       .json({ error: "Internal server error during session processing." });
+  }
+};
+
+// 🌐 OAUTH CALLBACK & USER SYNC
+export const oauthCallback = async (req: Request, res: Response) => {
+  const { email, name, provider, providerId, avatarUrl, githubAccessToken } = req.body;
+
+  try {
+    if (!email) {
+      return res.status(400).json({ error: "Email is required for OAuth authentication." });
+    }
+
+    // Upsert user in database
+    let user = await prisma.user.findUnique({ where: { email } });
+
+    if (user) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          name: name || user.name,
+          provider: provider || user.provider,
+          providerId: providerId || user.providerId,
+          avatarUrl: avatarUrl || user.avatarUrl,
+          githubAccessToken: githubAccessToken || user.githubAccessToken,
+        },
+      });
+    } else {
+      user = await prisma.user.create({
+        data: {
+          email,
+          name,
+          provider,
+          providerId,
+          avatarUrl,
+          githubAccessToken,
+        },
+      });
+    }
+
+    // Establish a signed security token session
+    const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: "7d" });
+
+    res.cookie("token", token, cookieOptions);
+
+    return res.status(200).json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        avatarUrl: user.avatarUrl,
+        provider: user.provider,
+      },
+    });
+  } catch (error) {
+    console.error("OAuth processing error:", error);
+    return res.status(500).json({ error: "Failed to process OAuth session." });
   }
 };
 

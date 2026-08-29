@@ -5,7 +5,7 @@ import { useAppStore } from '../store/useAppStore';
 import { useAuthStore } from '../store/authStore';
 import api from '../utils/api';
 import ProfileModal from './ProfileModal';
-import { Trash2, Loader2 } from 'lucide-react';
+import { Trash2, Loader2, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Sidebar() {
@@ -15,7 +15,7 @@ export default function Sidebar() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const { user } = useAuthStore();
+  const { user, logout } = useAuthStore();
 
   // Extract state & setters from Zustand store
   const {
@@ -55,14 +55,34 @@ export default function Sidebar() {
     const interval = setInterval(async () => {
       try {
         const response = await api.get('/repositories');
-        setRepositories(response.data);
+        const updatedRepos: any[] = response.data;
+        setRepositories(updatedRepos);
+
+        // Fallback progress calculation for production environments where WebSockets may be blocked
+        const activePendingRepo = updatedRepos.find(
+          (r: any) => r.status !== 'READY' && r.status !== 'FAILED'
+        );
+
+        if (activePendingRepo) {
+          const statusProgressMap: Record<string, number> = {
+            PENDING: 15,
+            CLONING: 40,
+            PROCESSING: 75,
+          };
+          setIngestionProgress({
+            status: activePendingRepo.status,
+            progress: statusProgressMap[activePendingRepo.status] || 25,
+          });
+        } else {
+          setIngestionProgress(null);
+        }
       } catch (err) {
         // Silent background sync
       }
-    }, 3500);
+    }, 3000);
 
     return () => clearInterval(interval);
-  }, [repositories, setRepositories]);
+  }, [repositories, setRepositories, setIngestionProgress]);
 
   // Submit ingestion request
   const handleIngestSubmit = async (e: React.FormEvent) => {
@@ -233,14 +253,27 @@ export default function Sidebar() {
 
         {/* User Profile & Footer Section */}
         <div className="pt-3 border-t border-outline-variant space-y-2">
-          <button
-            type="button"
-            onClick={() => setIsProfileOpen(true)}
-            className="w-full flex items-center justify-between px-3 py-2 bg-surface border border-outline-variant rounded-[2px] text-xs font-code-sm text-on-surface hover:border-primary transition-colors cursor-pointer"
-          >
-            <span className="truncate font-medium">{user?.name || user?.email || 'Profile'}</span>
-            <span className="text-[10px] text-outline uppercase">Settings</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsProfileOpen(true)}
+              className="flex-1 flex items-center justify-between px-3 py-2 bg-surface border border-outline-variant rounded-[2px] text-xs font-code-sm text-on-surface hover:border-primary transition-colors cursor-pointer"
+            >
+              <span className="truncate font-medium">{user?.name || user?.email || 'Profile'}</span>
+              <span className="text-[10px] text-outline uppercase">Settings</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                logout();
+                window.location.href = '/login';
+              }}
+              className="p-2 bg-surface border border-outline-variant rounded-[2px] text-xs text-on-surface-variant hover:text-error hover:border-error transition-colors cursor-pointer flex items-center justify-center shrink-0"
+              title="Log Out"
+            >
+              <LogOut size={14} />
+            </button>
+          </div>
         </div>
       </aside>
 
