@@ -25,7 +25,9 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isHydrated) return;
 
-    if (!isAuthenticated && pathname !== '/login') {
+    const isPublicPath = pathname === '/login' || pathname?.startsWith('/auth/callback');
+
+    if (!isAuthenticated && !isPublicPath) {
       // Not logged in -> bounce to login page
       router.replace('/login');
     } else if (isAuthenticated && pathname === '/login') {

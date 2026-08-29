@@ -3,6 +3,7 @@ import {
   register,
   login,
   logout,
+  oauthCallback,
   getProfile,
   updateProfile,
   deleteAccount,
@@ -14,6 +15,7 @@ const router = express.Router();
 router.post('/register', register);
 router.post('/login', login);
 router.post('/logout', logout);
+router.post('/oauth-callback', oauthCallback);
 router.get('/me', requireAuth, getProfile);
 router.put('/profile', requireAuth, updateProfile);
 router.delete('/account', requireAuth, deleteAccount);
