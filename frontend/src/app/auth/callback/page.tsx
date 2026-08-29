@@ -64,7 +64,11 @@ export default function AuthCallbackPage() {
           }
         }
 
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error: sessionErr } = await supabase.auth.getSession();
+        if (sessionErr && isSubscribed) {
+          setError(sessionErr.message);
+          return;
+        }
         if (session && isSubscribed) {
           await syncUserWithBackend(session);
           return;
