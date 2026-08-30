@@ -21,8 +21,12 @@ export default function AuthCallbackPage() {
 
   useEffect(() => {
     let isSubscribed = true;
+    let isHandled = false;
 
     async function syncUserWithBackend(session: any) {
+      if (!session || !session.user || isHandled) return;
+      isHandled = true;
+
       try {
         const user = session.user;
         const provider = user.app_metadata?.provider || 'oauth';
@@ -49,10 +53,14 @@ export default function AuthCallbackPage() {
       } catch (err: any) {
         console.error('Backend OAuth sync error:', err);
         if (isSubscribed) {
-          const backendErr = err.response?.data?.error || err.message || 'Failed to sync session with backend.';
+          const backendErr =
+            err.response?.data?.error ||
+            err.message ||
+            'Failed to sync OAuth user session with backend.';
           setError(`Backend Sync Error: ${backendErr}`);
-
-          // Perform health check automatically to diagnose if backend is down
+          setDiagnosticInfo(
+            'The frontend authenticated with Supabase, but the backend server failed to process the user session. Check if your backend is running and database is reachable.'
+          );
           runHealthCheck();
         }
       }
@@ -72,35 +80,37 @@ export default function AuthCallbackPage() {
         if (oauthError) {
           if (isSubscribed) {
             const decoded = decodeURIComponent(oauthError.replace(/\+/g, ' '));
-            setError(decoded);
-
-            if (decoded.includes('unauthorized') || decoded.includes('provider') || decoded.includes('401')) {
-              setDiagnosticInfo(
-                'Make sure Google OAuth is enabled in your Supabase Console (Authentication > Providers > Google) and Redirect URLs are set.'
-              );
-            }
+            setError(`Provider OAuth Error: ${decoded}`);
+            setDiagnosticInfo(
+              'Supabase or the OAuth provider (GitHub / Google) returned an authorization error. Ensure provider is enabled in Supabase Dashboard (Authentication > Providers) and Redirect URL http://localhost:3000/auth/callback is allowed.'
+            );
           }
           return;
         }
 
         const code = searchParams.get('code');
         if (code) {
+          console.log('[AuthCallback] Exchanging code for session...');
           const { data, error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
+
           if (exchangeErr) {
+            console.error('[AuthCallback] Exchange code error:', exchangeErr);
             if (isSubscribed) {
-              setError(`Supabase Exchange Error: ${exchangeErr.message}`);
+              setError(`Supabase Auth Code Exchange Failed: ${exchangeErr.message}`);
               setDiagnosticInfo(
-                'Supabase failed to exchange auth code for a session. Verify that your Supabase Anon Key and Google Client credentials match.'
+                'Supabase failed to exchange the authorization code for a session token (Status 401). Please check:\n1. GitHub/Google provider is enabled in Supabase Dashboard.\n2. Redirect URL (http://localhost:3000/auth/callback) is added in Supabase Auth settings.\n3. Your NEXT_PUBLIC_SUPABASE_ANON_KEY is valid.'
               );
             }
             return;
           }
+
           if (data?.session && isSubscribed) {
             await syncUserWithBackend(data.session);
             return;
           }
         }
 
+        // Try standard session retrieval
         const { data: { session }, error: sessionErr } = await supabase.auth.getSession();
         if (sessionErr && isSubscribed) {
           setError(`Session Retrieval Error: ${sessionErr.message}`);
@@ -113,35 +123,37 @@ export default function AuthCallbackPage() {
 
         // Listen for session established via hash fragment / OAuth PKCE exchange
         const { data: authListener } = supabase.auth.onAuthStateChange(async (event, newSession) => {
-          if (newSession && isSubscribed) {
-            try {
-              await syncUserWithBackend(newSession);
-            } catch (err: any) {
-              if (isSubscribed) setError(`Auth State Sync Error: ${err.message}`);
-            }
+          console.log('[AuthCallback] onAuthStateChange event:', event);
+          if (newSession && isSubscribed && !isHandled) {
+            await syncUserWithBackend(newSession);
           }
         });
 
-        if (!code && !searchParams.get('access_token') && !hashParams.get('access_token')) {
-          // Give Supabase onAuthStateChange 2 seconds to fire before declaring missing token
-          setTimeout(() => {
-            if (isSubscribed && !error) {
-              supabase.auth.getSession().then(({ data }) => {
-                if (!data.session && isSubscribed) {
-                  setError('No authentication token received from provider. Please try signing in again.');
-                }
-              });
-            }
-          }, 2000);
-        }
+        // Overall 4-second safety fallback: if no session was synced within 4 seconds, show clear error & health check
+        const fallbackTimer = setTimeout(() => {
+          if (isSubscribed && !isHandled && !error) {
+            supabase.auth.getSession().then(({ data }) => {
+              if (data?.session) {
+                syncUserWithBackend(data.session);
+              } else if (isSubscribed) {
+                setError('Authentication process timed out. No active session token received from Supabase.');
+                setDiagnosticInfo(
+                  'Make sure GitHub/Google OAuth is enabled in Supabase Dashboard (Authentication > Providers) and Redirect URL is configured as http://localhost:3000/auth/callback.'
+                );
+                runHealthCheck();
+              }
+            });
+          }
+        }, 4000);
 
         return () => {
+          clearTimeout(fallbackTimer);
           authListener.subscription.unsubscribe();
         };
       } catch (err: any) {
-        console.error('OAuth Callback error:', err);
+        console.error('OAuth Callback unhandled error:', err);
         if (isSubscribed) {
-          setError(err.response?.data?.error || err.message || 'Failed to authenticate via OAuth.');
+          setError(err.response?.data?.error || err.message || 'Failed to complete OAuth authentication.');
         }
       }
     }
@@ -165,8 +177,8 @@ export default function AuthCallbackPage() {
             </div>
 
             {diagnosticInfo && (
-              <div className="rounded-md bg-surface-container border border-outline-variant p-3 text-xs font-code-sm text-on-surface-variant">
-                <span className="font-bold text-primary block mb-1">💡 Troubleshooting Tip:</span>
+              <div className="rounded-md bg-surface-container border border-outline-variant p-3 text-xs font-code-sm text-on-surface-variant whitespace-pre-line">
+                <span className="font-bold text-primary block mb-1">💡 Troubleshooting Steps:</span>
                 {diagnosticInfo}
               </div>
             )}

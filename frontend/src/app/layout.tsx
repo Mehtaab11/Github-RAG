@@ -3,7 +3,7 @@ import "./globals.css";
 import AuthGuard from "../components/AuthGuard";
 
 export const metadata: Metadata = {
-  title: "GitGPT Workspace",
+  title: "GitGPT ",
   description: "AI Technical Assistant for Repositories",
 };
 
@@ -29,4 +29,4 @@ export default function RootLayout({
       </body>
     </html>
   );
-}
+}
