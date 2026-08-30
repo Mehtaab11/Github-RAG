@@ -47,4 +47,31 @@ api.interceptors.response.use(
   }
 );
 
+export interface HealthCheckResponse {
+  status: 'healthy' | 'degraded' | 'unhealthy' | 'offline';
+  timestamp?: string;
+  uptimeSeconds?: number;
+  environment?: string;
+  responseTimeMs?: number;
+  services?: {
+    database?: { status: 'ok' | 'error'; message?: string; latencyMs?: number };
+    qdrant?: { status: 'ok' | 'error'; message?: string; latencyMs?: number };
+    jwt?: { status: string };
+  };
+  errorMessage?: string;
+}
+
+export async function checkBackendHealth(): Promise<HealthCheckResponse> {
+  try {
+    const res = await api.get<HealthCheckResponse>('/health', { timeout: 5000 });
+    return res.data;
+  } catch (err: any) {
+    return {
+      status: 'offline',
+      errorMessage: err.response?.data?.error || err.message || 'Backend server is unreachable',
+    };
+  }
+}
+
+export { apiBaseUrl };
 export default api;

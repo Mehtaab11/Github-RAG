@@ -10,6 +10,7 @@ import repoRoutes from "./routes/repoRoutes";
 import chatRoutes from "./routes/chatRoutes";
 import authRoutes from "./routes/authRoutes";
 import { initSocket } from "./config/socket";
+import healthRoutes from "./routes/healthRoutes";
 const app = express();
 
 const server = http.createServer(app);
@@ -54,10 +55,8 @@ app.use(express.json());
 app.use("/api/repositories", repoRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/auth", authRoutes);
-
-app.get("/health", (req, res) => {
-  res.json({ status: "healthy", message: "Server is running " });
-});
+app.use("/api/health", healthRoutes);
+app.use("/health", healthRoutes);
 
 async function startServer() {
   await initQdrant();

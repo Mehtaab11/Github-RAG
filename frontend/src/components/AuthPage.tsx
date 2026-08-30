@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import api from '../utils/api';
+import api, { checkBackendHealth, HealthCheckResponse } from '../utils/api';
 import { useAuthStore } from '../store/authStore';
 import { supabase } from '../utils/supabaseClient';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Activity } from 'lucide-react';
 
 export default function AuthPage() {
   const loginState = useAuthStore((state) => state.login);
@@ -14,6 +14,15 @@ export default function AuthPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [legalModal, setLegalModal] = useState<'tos' | 'privacy' | null>(null);
+  const [healthStatus, setHealthStatus] = useState<HealthCheckResponse | null>(null);
+  const [isCheckingHealth, setIsCheckingHealth] = useState(false);
+
+  const handleCheckHealth = async () => {
+    setIsCheckingHealth(true);
+    const health = await checkBackendHealth();
+    setHealthStatus(health);
+    setIsCheckingHealth(false);
+  };
 
   const handleOAuthSignIn = async (provider: 'github' | 'google') => {
     setErrorMsg('');
@@ -47,7 +56,17 @@ export default function AuthPage() {
       loginState(token, user);
       window.location.href = '/';
     } catch (err: any) {
-      setErrorMsg(err.response?.data?.error || 'An authentication error occurred.');
+      const serverErr = err.response?.data?.error;
+      const status = err.response?.status;
+      if (status === 500) {
+        setErrorMsg(serverErr || 'Server Error 500: Internal server error. The backend or database service may be experiencing issues.');
+        handleCheckHealth();
+      } else if (err.code === 'ERR_NETWORK') {
+        setErrorMsg('Network Error: Unable to reach the backend server. Please verify the backend is running.');
+        handleCheckHealth();
+      } else {
+        setErrorMsg(serverErr || 'An authentication error occurred. Please check your credentials.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -55,16 +74,68 @@ export default function AuthPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface-container-lowest p-6 text-on-surface flex-col font-body-md">
-      <div className="w-full max-w-sm space-y-6 rounded-md border border-outline-variant bg-surface p-8">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-primary">GitGPT</h2>
-          <p className="mt-1 text-xs text-on-surface-variant font-code-sm">
-            {isLoginView ? 'Sign in to access code repositories' : 'Create your account'}
-          </p>
+      <div className="w-full max-w-sm space-y-6 rounded-md border border-outline-variant bg-surface p-8 shadow-lg">
+        <div className="flex justify-between items-start">
+          <div>
+            <h2 className="text-xl font-bold tracking-tight text-primary">GitGPT</h2>
+            <p className="mt-1 text-xs text-on-surface-variant font-code-sm">
+              {isLoginView ? 'Sign in to access code repositories' : 'Create your account'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleCheckHealth}
+            disabled={isCheckingHealth}
+            title="Check backend server health status"
+            className="p-1 text-xs text-on-surface-variant hover:text-primary transition-colors bg-transparent border border-outline-variant rounded flex items-center gap-1 cursor-pointer font-code-sm"
+          >
+            <Activity size={14} className={isCheckingHealth ? 'animate-pulse text-primary' : ''} />
+            <span className="text-[10px]">Health</span>
+          </button>
         </div>
 
+        {healthStatus && (
+          <div className="rounded-md border border-outline-variant bg-surface-container p-3 text-xs font-code-sm text-on-surface space-y-1">
+            <div className="font-bold flex justify-between items-center">
+              <span>Backend Status:</span>
+              <span
+                className={
+                  healthStatus.status === 'healthy'
+                    ? 'text-green-500 font-bold'
+                    : healthStatus.status === 'degraded'
+                    ? 'text-yellow-500 font-bold'
+                    : 'text-red-500 font-bold'
+                }
+              >
+                {healthStatus.status.toUpperCase()}
+              </span>
+            </div>
+            {healthStatus.services?.database && (
+              <div>
+                DB (Prisma):{' '}
+                <span className={healthStatus.services.database.status === 'ok' ? 'text-green-500' : 'text-red-500'}>
+                  {healthStatus.services.database.status}
+                  {healthStatus.services.database.message ? ` (${healthStatus.services.database.message})` : ''}
+                </span>
+              </div>
+            )}
+            {healthStatus.services?.qdrant && (
+              <div>
+                Vector DB:{' '}
+                <span className={healthStatus.services.qdrant.status === 'ok' ? 'text-green-500' : 'text-red-500'}>
+                  {healthStatus.services.qdrant.status}
+                  {healthStatus.services.qdrant.message ? ` (${healthStatus.services.qdrant.message})` : ''}
+                </span>
+              </div>
+            )}
+            {healthStatus.errorMessage && (
+              <div className="text-red-400 font-semibold">{healthStatus.errorMessage}</div>
+            )}
+          </div>
+        )}
+
         {errorMsg && (
-          <div className="rounded-md bg-error-container border border-outline-variant p-3 text-xs font-code-sm text-on-error-container">
+          <div className="rounded-md bg-error-container border border-outline-variant p-3 text-xs font-code-sm text-on-error-container break-words">
             {errorMsg}
           </div>
         )}

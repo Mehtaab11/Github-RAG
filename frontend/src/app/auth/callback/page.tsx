@@ -2,34 +2,59 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '../../../utils/supabaseClient';
-import api from '../../../utils/api';
+import api, { checkBackendHealth, HealthCheckResponse } from '../../../utils/api';
 import { useAuthStore } from '../../../store/authStore';
 
 export default function AuthCallbackPage() {
   const loginState = useAuthStore((state) => state.login);
   const [error, setError] = useState<string | null>(null);
+  const [diagnosticInfo, setDiagnosticInfo] = useState<string | null>(null);
+  const [healthInfo, setHealthInfo] = useState<HealthCheckResponse | null>(null);
+  const [isCheckingHealth, setIsCheckingHealth] = useState(false);
+
+  const runHealthCheck = async () => {
+    setIsCheckingHealth(true);
+    const health = await checkBackendHealth();
+    setHealthInfo(health);
+    setIsCheckingHealth(false);
+  };
 
   useEffect(() => {
     let isSubscribed = true;
 
     async function syncUserWithBackend(session: any) {
-      const user = session.user;
-      const provider = user.app_metadata?.provider || 'oauth';
-      const providerToken = session.provider_token;
+      try {
+        const user = session.user;
+        const provider = user.app_metadata?.provider || 'oauth';
+        const providerToken = session.provider_token;
 
-      const response = await api.post('/auth/oauth-callback', {
-        email: user.email,
-        name: user.user_metadata?.full_name || user.user_metadata?.name || user.user_metadata?.preferred_username,
-        avatarUrl: user.user_metadata?.avatar_url || user.user_metadata?.picture,
-        provider,
-        providerId: user.id,
-        githubAccessToken: providerToken,
-      });
+        const response = await api.post('/auth/oauth-callback', {
+          email: user.email,
+          name:
+            user.user_metadata?.full_name ||
+            user.user_metadata?.name ||
+            user.user_metadata?.preferred_username ||
+            user.email?.split('@')[0],
+          avatarUrl: user.user_metadata?.avatar_url || user.user_metadata?.picture,
+          provider,
+          providerId: user.id,
+          githubAccessToken: providerToken,
+        });
 
-      const { token, user: backendUser } = response.data;
-      if (isSubscribed) {
-        loginState(token, backendUser);
-        window.location.href = '/';
+        const { token, user: backendUser } = response.data;
+        if (isSubscribed) {
+          loginState(token, backendUser);
+          window.location.href = '/';
+        }
+      } catch (err: any) {
+        console.error('Backend OAuth sync error:', err);
+        if (isSubscribed) {
+          const backendErr = err.response?.data?.error || err.message || 'Failed to sync session with backend.';
+          setError(`Backend Sync Error: ${backendErr}`);
+
+          // Perform health check automatically to diagnose if backend is down
+          runHealthCheck();
+        }
       }
     }
 
@@ -46,16 +71,28 @@ export default function AuthCallbackPage() {
 
         if (oauthError) {
           if (isSubscribed) {
-            setError(decodeURIComponent(oauthError.replace(/\+/g, ' ')));
+            const decoded = decodeURIComponent(oauthError.replace(/\+/g, ' '));
+            setError(decoded);
+
+            if (decoded.includes('unauthorized') || decoded.includes('provider') || decoded.includes('401')) {
+              setDiagnosticInfo(
+                'Make sure Google OAuth is enabled in your Supabase Console (Authentication > Providers > Google) and Redirect URLs are set.'
+              );
+            }
           }
           return;
         }
 
         const code = searchParams.get('code');
         if (code) {
-          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) {
-            if (isSubscribed) setError(error.message);
+          const { data, error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeErr) {
+            if (isSubscribed) {
+              setError(`Supabase Exchange Error: ${exchangeErr.message}`);
+              setDiagnosticInfo(
+                'Supabase failed to exchange auth code for a session. Verify that your Supabase Anon Key and Google Client credentials match.'
+              );
+            }
             return;
           }
           if (data?.session && isSubscribed) {
@@ -66,7 +103,7 @@ export default function AuthCallbackPage() {
 
         const { data: { session }, error: sessionErr } = await supabase.auth.getSession();
         if (sessionErr && isSubscribed) {
-          setError(sessionErr.message);
+          setError(`Session Retrieval Error: ${sessionErr.message}`);
           return;
         }
         if (session && isSubscribed) {
@@ -77,14 +114,25 @@ export default function AuthCallbackPage() {
         // Listen for session established via hash fragment / OAuth PKCE exchange
         const { data: authListener } = supabase.auth.onAuthStateChange(async (event, newSession) => {
           if (newSession && isSubscribed) {
-            await syncUserWithBackend(newSession);
+            try {
+              await syncUserWithBackend(newSession);
+            } catch (err: any) {
+              if (isSubscribed) setError(`Auth State Sync Error: ${err.message}`);
+            }
           }
         });
 
         if (!code && !searchParams.get('access_token') && !hashParams.get('access_token')) {
-          if (isSubscribed) {
-            setError('No authentication token received from provider. Please try signing in again.');
-          }
+          // Give Supabase onAuthStateChange 2 seconds to fire before declaring missing token
+          setTimeout(() => {
+            if (isSubscribed && !error) {
+              supabase.auth.getSession().then(({ data }) => {
+                if (!data.session && isSubscribed) {
+                  setError('No authentication token received from provider. Please try signing in again.');
+                }
+              });
+            }
+          }, 2000);
         }
 
         return () => {
@@ -107,23 +155,82 @@ export default function AuthCallbackPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface-container-lowest p-6 text-on-surface flex-col font-body-md">
-      <div className="w-full max-w-sm text-center space-y-4 rounded-md border border-outline-variant bg-surface p-8">
+      <div className="w-full max-w-md text-center space-y-4 rounded-md border border-outline-variant bg-surface p-8 shadow-lg">
         <h2 className="text-xl font-bold tracking-tight text-primary">GitGPT</h2>
         {error ? (
-          <div className="space-y-4">
-            <div className="rounded-md bg-error-container border border-outline-variant p-3 text-xs font-code-sm text-on-error-container">
+          <div className="space-y-4 text-left">
+            <div className="rounded-md bg-error-container border border-outline-variant p-3 text-xs font-code-sm text-on-error-container break-words">
+              <span className="font-bold block mb-1">Authentication Error:</span>
               {error}
             </div>
-            <a
-              href="/login"
-              className="inline-block text-xs font-code-sm text-primary underline"
-            >
-              Return to Login
-            </a>
+
+            {diagnosticInfo && (
+              <div className="rounded-md bg-surface-container border border-outline-variant p-3 text-xs font-code-sm text-on-surface-variant">
+                <span className="font-bold text-primary block mb-1">💡 Troubleshooting Tip:</span>
+                {diagnosticInfo}
+              </div>
+            )}
+
+            {healthInfo && (
+              <div className="rounded-md border border-outline-variant bg-surface-container-high p-3 text-xs font-code-sm text-on-surface space-y-1">
+                <div className="font-bold flex justify-between items-center">
+                  <span>Backend Health Status:</span>
+                  <span
+                    className={
+                      healthInfo.status === 'healthy'
+                        ? 'text-green-500 font-bold'
+                        : healthInfo.status === 'degraded'
+                        ? 'text-yellow-500 font-bold'
+                        : 'text-red-500 font-bold'
+                    }
+                  >
+                    {healthInfo.status.toUpperCase()}
+                  </span>
+                </div>
+                {healthInfo.services?.database && (
+                  <div>
+                    Database (Prisma):{' '}
+                    <span className={healthInfo.services.database.status === 'ok' ? 'text-green-500' : 'text-red-500'}>
+                      {healthInfo.services.database.status}
+                      {healthInfo.services.database.message ? ` (${healthInfo.services.database.message})` : ''}
+                    </span>
+                  </div>
+                )}
+                {healthInfo.services?.qdrant && (
+                  <div>
+                    Vector DB (Qdrant):{' '}
+                    <span className={healthInfo.services.qdrant.status === 'ok' ? 'text-green-500' : 'text-red-500'}>
+                      {healthInfo.services.qdrant.status}
+                      {healthInfo.services.qdrant.message ? ` (${healthInfo.services.qdrant.message})` : ''}
+                    </span>
+                  </div>
+                )}
+                {healthInfo.errorMessage && (
+                  <div className="text-red-400 font-semibold">{healthInfo.errorMessage}</div>
+                )}
+              </div>
+            )}
+
+            <div className="flex gap-2 justify-center pt-2">
+              <button
+                type="button"
+                onClick={runHealthCheck}
+                disabled={isCheckingHealth}
+                className="px-3 py-1.5 rounded-md border border-outline-variant bg-surface-container hover:bg-surface-container-high text-xs font-code-sm text-on-surface transition-colors cursor-pointer"
+              >
+                {isCheckingHealth ? 'Checking Health...' : 'Check Backend Health'}
+              </button>
+              <a
+                href="/login"
+                className="px-3 py-1.5 rounded-md bg-primary text-xs font-code-sm text-background font-medium transition-colors hover:bg-primary-fixed cursor-pointer no-underline inline-block"
+              >
+                Return to Login
+              </a>
+            </div>
           </div>
         ) : (
-          <div className="space-y-3">
-            <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent" />
+          <div className="space-y-3 py-4">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent" />
             <p className="text-xs font-code-sm text-on-surface-variant">
               Completing secure authentication...
             </p>
