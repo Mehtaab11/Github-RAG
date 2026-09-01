@@ -231,6 +231,18 @@ Open `http://localhost:3000` in your browser to start querying codebases with **
 
 ---
 
+## 🔧 Troubleshooting & Operational Guide
+
+| Issue / Symptom | Possible Cause | Resolution |
+| :--- | :--- | :--- |
+| `QdrantConnectionError` | Qdrant container offline or invalid Cloud API Key | Verify `QDRANT_URL` in `backend/.env` or run `docker-compose up -d` for local setup. |
+| `Redis ECONNREFUSED` | BullMQ worker cannot connect to Redis instance | Verify `REDIS_URL`. Ensure Upstash URI starts with `rediss://` or local container is active. |
+| `PrismaClientInitializationError` | Database connection failure | Verify Neon PostgreSQL URL in `DATABASE_URL` and ensure IP allows inbound traffic. |
+| `429 Rate Limit Exceeded` | Gemini API quota exhausted during chunk embedding | Implement batching or verify API key plan in Google AI Studio dashboard. |
+| WebSocket connection timeout | CORS mismatch between client and server | Ensure `FRONTEND_URL` in `backend/.env` matches `http://localhost:3000`. |
+
+---
+
 ## 🛡️ License
 
 Distributed under the MIT License. See `LICENSE` for more information.
