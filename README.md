@@ -251,6 +251,8 @@ Open `http://localhost:3000` in your browser to start querying codebases with **
 - [ ] **Interactive AST Code Explorer**: Embed tree view visualization of syntax trees directly in the web UI.
 - [ ] **Hybrid Retrieval (Dense + Sparse)**: Combine Qdrant vector search with BM25 keyword matching for optimal precision.
 
+
+
 ---
 
 ## 🔒 Security & API Safety
