@@ -1,6 +1,19 @@
+<div align="center">
+
 # 🚀 GitGPT — AI Code Intelligence & Repository RAG Platform
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/Node.js-v18%2B-green.svg)](https://nodejs.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black.svg)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)](https://www.typescriptlang.org/)
+[![Qdrant](https://img.shields.io/badge/Qdrant-Cloud-red.svg)](https://qdrant.tech/)
+[![Google Gemini](https://img.shields.io/badge/Google%20Gemini-API-4285F4.svg)](https://ai.google.dev/)
+
 **GitGPT** is a production-ready, full-stack **Retrieval-Augmented Generation (RAG)** platform engineered to ingest, index, and query public GitHub repositories in natural language. Powered by **Google Gemini**, **Qdrant Vector Database**, **BullMQ**, and **Next.js 15**, GitGPT allows developers to chat with any codebase, trace architectural flows, and receive grounded answers with exact source file citations.
+
+[Features](#-features) • [Tech Stack](#%EF%B8%8F-tech-stack) • [Architecture](#-system-architecture--data-flow) • [API Docs](#-api-reference) • [Getting Started](#-getting-started)
+
+</div>
 
 ---
 
