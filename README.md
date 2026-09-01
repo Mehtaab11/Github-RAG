@@ -243,6 +243,44 @@ Open `http://localhost:3000` in your browser to start querying codebases with **
 
 ---
 
+## 🗺️ Roadmap & Future Enhancements
+
+- [ ] **Multi-Repository Graph Indexing**: Support querying across multiple linked repositories simultaneously.
+- [ ] **GitHub Actions Bot Integration**: Automatically post RAG-powered PR reviews and code explanations directly on GitHub PRs.
+- [ ] **Local LLM & Embedding Fallbacks**: Enable offline operation via Ollama or vLLM models.
+- [ ] **Interactive AST Code Explorer**: Embed tree view visualization of syntax trees directly in the web UI.
+- [ ] **Hybrid Retrieval (Dense + Sparse)**: Combine Qdrant vector search with BM25 keyword matching for optimal precision.
+
+---
+
+## 🔒 Security & API Safety
+
+* **Secrets Management**: Never commit `.env` or sensitive API tokens to git repositories.
+* **TLS / SSL Connection Enforcement**: Production database connections enforce SSL encryption (`sslmode=require`).
+* **Input Sanitization**: User prompts and repository URLs are sanitized before entering parsing and vector processing pipelines.
+
+---
+
+## 🤝 Contributing
+
+Contributions are what make the open-source community an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
+
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'feat: Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+---
+
 ## 🛡️ License
 
-Distributed under the MIT License. See `LICENSE` for more information.
+Distributed under the **MIT License**. See `LICENSE` for more information.
+
+---
+
+<div align="center">
+
+Made with ❤️ powered by **Google Gemini**, **Qdrant Cloud**, **Next.js 15**, and **BullMQ**.
+
+</div>
