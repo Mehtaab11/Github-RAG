@@ -17,14 +17,15 @@
 
 ---
 
-## ✨ Features
+## ✨ Key Features & Technical Highlights
 
-* **⚡ Asynchronous Ingestion Pipeline**: Ingests public GitHub repositories asynchronously off the main web thread using **BullMQ** and **Redis**.
-* **🧠 Context-Aware Code Chunking**: Recursively parses codebase AST structures, filtering binaries, lockfiles, and non-essential directories to construct high-quality text chunks.
-* **🔍 High-Dimensional Vector Retrieval**: Stores code embeddings in **Qdrant Cloud** for sub-second semantic code search.
-* **🤖 Grounded AI Conversations**: Queries **Google Gemini API** with top-$K$ vector matches to provide precise answers accompanied by clickable source file references.
-* **📡 Real-Time WebSockets**: Live progress tracking of repository cloning, file scanning, chunking, and embedding stages via Socket.io.
-* **🎨 Modern UI/UX**: Designed with Next.js 15, TypeScript, and Tailwind CSS, featuring an interactive dark mode layout, live processing terminal, code syntax highlighting, copy-to-clipboard actions, and a built-in file tree explorer.
+* **⚡ Asynchronous Ingestion Pipeline**: Ingests public GitHub repositories asynchronously off the HTTP thread using **BullMQ** job queues and **Upstash Redis**. Handles large repositories without blocking user interactions.
+* **🧠 Context-Aware Code Chunking**: Recursively parses codebase structures while filtering binary assets, lockfiles, and `node_modules`. Generates semantic text chunks preserving scope, function context, and file paths.
+* **🔍 High-Dimensional Vector Search**: Generates dense code embeddings via **Google Gemini (`text-embedding-004`)** and indexes them into **Qdrant Cloud** collections for sub-second semantic retrieval.
+* **🤖 Grounded RAG Chat Engine**: Synthesizes responses using **Google Gemini 1.5 Pro/Flash**, augmenting prompts with top-$K$ vector matches to eliminate hallucinations and provide line-by-line source file citations.
+* **📡 Real-Time Progress Streaming**: Emits live WebSocket events via **Socket.io** during repository cloning, file scanning, AST chunking, vector embedding, and database sync.
+* **🔐 OAuth & JWT Authentication**: Features full user session management supporting GitHub and Google OAuth providers powered by **Supabase Auth** / **JWT middleware**.
+* **🎨 Modern UI/UX Architecture**: Crafted with Next.js 15 App Router, React 19, TypeScript, and Tailwind CSS. Includes dynamic live terminal progress, code syntax highlighting, copy-to-clipboard blocks, and an interactive repo file tree explorer.
 
 ---
 
