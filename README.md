@@ -103,6 +103,42 @@ github-rag/
 
 ---
 
+## 📡 API Reference & WebSockets
+
+### REST API Endpoints
+
+#### 🔐 Authentication Routes
+| Method | Endpoint | Description | Auth Required |
+| :--- | :--- | :--- | :---: |
+| `POST` | `/api/auth/register` | Register new user account | ❌ |
+| `POST` | `/api/auth/login` | Authenticate user and receive JWT session token | ❌ |
+| `GET` | `/api/auth/me` | Retrieve active user profile details | 🔒 |
+
+#### 📦 Repository Management
+| Method | Endpoint | Description | Auth Required |
+| :--- | :--- | :--- | :---: |
+| `POST` | `/api/repositories/ingest` | Trigger async ingestion of GitHub repository | 🔒 |
+| `GET` | `/api/repositories` | List all indexed repositories for current user | 🔒 |
+| `GET` | `/api/repositories/:id` | Fetch detailed repository status & file structure | 🔒 |
+| `DELETE` | `/api/repositories/:id` | Purge repository vectors from Qdrant & database | 🔒 |
+
+#### 💬 AI Code Chat & Q&A
+| Method | Endpoint | Description | Auth Required |
+| :--- | :--- | :--- | :---: |
+| `POST` | `/api/chat/query` | Submit prompt & retrieve grounded AI answer + citations | 🔒 |
+| `GET` | `/api/chat/history/:repoId` | Retrieve chat message history for repository | 🔒 |
+
+### ⚡ WebSocket Real-Time Event Protocol (`Socket.io`)
+
+| Event Name | Direction | Payload Schema | Description |
+| :--- | :--- | :--- | :--- |
+| `join:repo` | Client ➔ Server | `{ repoId: string }` | Subscribe to live ingestion updates |
+| `ingestion:progress` | Server ➔ Client | `{ step: string, progress: number, details: string }` | Live progress bar and terminal status update |
+| `ingestion:error` | Server ➔ Client | `{ error: string }` | Emitted when repo cloning, chunking, or indexing fails |
+| `ingestion:complete` | Server ➔ Client | `{ repoId: string, totalChunks: number }` | Processing pipeline finished successfully |
+
+---
+
 ## 🚀 Getting Started
 
 ### Prerequisites
