@@ -47,6 +47,37 @@
 
 ---
 
+## 🏗️ System Architecture & Data Flow
+
+### 1. Ingestion Pipeline & Background Processing
+```mermaid
+graph TD
+    A[User Submits Repository URL] --> B[Express API Gateway]
+    B --> C[Push Job to BullMQ Queue]
+    C --> D[Upstash Redis Task Store]
+    D --> E[Background Ingestion Worker]
+    E --> F[Socket.io Real-Time Progress Events]
+    E --> G[Git Clone & Directory Filter]
+    G --> H[Recursive Code AST Chunker]
+    H --> I[Gemini Embedding API text-embedding-004]
+    I --> J[Qdrant Cloud Vector Database]
+    E --> K[Persist Repo Metadata to PostgreSQL]
+```
+
+### 2. RAG Query & Code Intelligence Workflow
+```mermaid
+graph LR
+    User[Developer Prompt] --> API[Express Chat Controller]
+    API --> Embed[Generate Query Vector via Gemini]
+    Embed --> Qdrant[Qdrant Similarity Search top-k]
+    Qdrant --> Context[Assemble Relevant Code Snippets & Metadata]
+    Context --> LLM[Google Gemini 1.5 LLM]
+    LLM --> Response[Grounded Response + File Citations]
+    Response --> UI[Next.js Interactive Chat Interface]
+```
+
+---
+
 ## 📁 Repository Architecture
 
 ```text
