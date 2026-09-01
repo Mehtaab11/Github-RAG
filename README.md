@@ -150,9 +150,24 @@ github-rag/
 
 ---
 
-### 1. Environment Configuration
+### 1. Environment Configuration Dictionary
 
-#### Backend (`backend/.env`)
+| Variable Key | Required | Description | Sample / Default Value |
+| :--- | :---: | :--- | :--- |
+| `PORT` | Yes | Backend API server port | `5000` |
+| `DATABASE_URL` | Yes | PostgreSQL connection string (Neon or Local) | `postgresql://user:pass@host/db` |
+| `JWT_SECRET` | Yes | Secret key for signing session JWT tokens | `super_secret_jwt_key` |
+| `GEMINI_API_KEY` | Yes | Google AI Studio Gemini API Key | `AIzaSy...` |
+| `QDRANT_URL` | Yes | Qdrant vector database URL | `https://cluster.qdrant.io` or `http://localhost:6333` |
+| `QDRANT_API_KEY` | Optional | Qdrant Cloud API key (omit for local Docker) | `your_qdrant_api_key` |
+| `REDIS_URL` | Yes | Upstash or Local Redis connection URI | `redis://localhost:6379` |
+| `FRONTEND_URL` | Yes | Client origin for CORS authorization | `http://localhost:3000` |
+| `NEXT_PUBLIC_API_URL` | Yes | Frontend REST API base endpoint | `http://localhost:5000/api` |
+| `NEXT_PUBLIC_BACKEND_URL` | Yes | Frontend Socket.io server connection endpoint | `http://localhost:5000` |
+
+#### Environment Files
+
+##### Backend (`backend/.env`)
 ```env
 PORT=5000
 DATABASE_URL="postgresql://user:password@ep-host.region.aws.neon.tech/neondb?sslmode=require"
@@ -164,7 +179,7 @@ REDIS_URL="rediss://default:password@your-redis-host.upstash.io:6379"
 FRONTEND_URL="http://localhost:3000"
 ```
 
-#### Frontend (`frontend/.env.local`)
+##### Frontend (`frontend/.env.local`)
 ```env
 NEXT_PUBLIC_API_URL="http://localhost:5000/api"
 NEXT_PUBLIC_BACKEND_URL="http://localhost:5000"
@@ -172,24 +187,47 @@ NEXT_PUBLIC_BACKEND_URL="http://localhost:5000"
 
 ---
 
-### 2. Backend Setup
+### 2. Local Infrastructure with Docker Compose
+
+Spin up local Qdrant Vector Database and Redis queue instances instantly:
+
+```bash
+# Start Qdrant (6333) and Redis (6379) in detached mode
+docker-compose up -d
+```
+
+---
+
+### 3. Backend & Database Setup
 
 ```bash
 cd backend
+
+# Install dependencies
 npm install
+
+# Run Prisma migrations & push schema to PostgreSQL
 npx prisma db push
+
+# Launch Express backend & BullMQ worker in dev mode
 npm run dev
 ```
 
-### 3. Frontend Setup
+---
+
+### 4. Frontend Application Setup
 
 ```bash
 cd frontend
+
+# Install dependencies
 npm install
+
+# Start Next.js development server
 npm run dev
 ```
 
-Open `http://localhost:3000` in your browser to start using **GitGPT**.
+Open `http://localhost:3000` in your browser to start querying codebases with **GitGPT**.
 
 ---
 
