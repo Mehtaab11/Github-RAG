@@ -241,16 +241,6 @@ Open `http://localhost:3000` in your browser to start querying codebases with **
 | `429 Rate Limit Exceeded` | Gemini API quota exhausted during chunk embedding | Implement batching or verify API key plan in Google AI Studio dashboard. |
 | WebSocket connection timeout | CORS mismatch between client and server | Ensure `FRONTEND_URL` in `backend/.env` matches `http://localhost:3000`. |
 
----
-
-## 🗺️ Roadmap & Future Enhancements
-
-- [ ] **Multi-Repository Graph Indexing**: Support querying across multiple linked repositories simultaneously.
-- [ ] **GitHub Actions Bot Integration**: Automatically post RAG-powered PR reviews and code explanations directly on GitHub PRs.
-- [ ] **Local LLM & Embedding Fallbacks**: Enable offline operation via Ollama or vLLM models.
-- [ ] **Interactive AST Code Explorer**: Embed tree view visualization of syntax trees directly in the web UI.
-- [ ] **Hybrid Retrieval (Dense + Sparse)**: Combine Qdrant vector search with BM25 keyword matching for optimal precision.
-
 
 
 ---
