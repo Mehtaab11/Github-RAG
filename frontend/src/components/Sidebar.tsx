@@ -171,7 +171,7 @@ export default function Sidebar() {
 
         {/* Ingestion Progress */}
         {ingestionProgress && ingestionProgress.status !== 'READY' && ingestionProgress.progress < 100 && (
-          <div className="border border-outline-variant bg-surface p-3 rounded-[2px] space-y-2">
+          <div className="border border-outline-variant bg-surface p-3 rounded-[2px] space-y-2.5">
             <div className="flex justify-between items-center text-xs font-code-sm">
               <span className="text-primary">{ingestionProgress.status || 'Ingesting'}</span>
               <span className="text-primary">{ingestionProgress.progress}%</span>
@@ -181,6 +181,17 @@ export default function Sidebar() {
                 className="h-full bg-primary transition-all duration-300"
                 style={{ width: `${ingestionProgress.progress}%` }}
               />
+            </div>
+            {Boolean(ingestionProgress.processedVectors || ingestionProgress.totalVectors) && (
+              <div className="text-[11px] font-code-sm text-on-surface-variant text-center">
+                Vectors: {ingestionProgress.processedVectors ?? 0} / {ingestionProgress.totalVectors ?? '?'}
+              </div>
+            )}
+            <div className="pt-1 flex items-center justify-center gap-1.5 text-[11px] font-code-sm leading-tight text-center">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+              <span className="glowing-text font-medium">
+                We are processing your repository, Please have patience.
+              </span>
             </div>
           </div>
         )}
@@ -213,7 +224,14 @@ export default function Sidebar() {
                       : 'hover:bg-surface-container text-on-surface-variant border border-transparent'
                   }`}
                 >
-                  <span className="truncate flex-1 mr-2">{repo.name}</span>
+                  <div className="truncate flex-1 mr-2 flex items-center justify-between">
+                    <span className="truncate">{repo.name}</span>
+                    {Boolean(repo.vectorCount && repo.vectorCount > 0) && (
+                      <span className="ml-1.5 text-[10px] text-outline px-1.5 py-0.5 rounded bg-surface border border-outline-variant/40 shrink-0 font-mono">
+                        {repo.vectorCount} vec
+                      </span>
+                    )}
+                  </div>
 
                   <div className="flex items-center gap-2 shrink-0">
                     {/* Status Indicator Dot */}

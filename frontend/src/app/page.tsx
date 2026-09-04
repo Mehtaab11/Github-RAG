@@ -13,7 +13,11 @@ export default function Home() {
   const repositories = useAppStore((state) => state.repositories);
   const [workingSince, setWorkingSince] = useState<string>("");
 
+  const ingestionProgress = useAppStore((state) => state.ingestionProgress);
   const activeRepo = repositories.find((r) => r.id === activeRepoId);
+  const isAnyRepoProcessing =
+    Boolean(ingestionProgress && ingestionProgress.status !== "READY" && ingestionProgress.progress < 100) ||
+    repositories.some((r) => r.status !== "READY" && r.status !== "FAILED");
 
   // Mount socket connection and fetch member information
   useEffect(() => {
@@ -52,6 +56,11 @@ export default function Home() {
           <span className="font-code-sm text-code-sm text-on-surface-variant truncate max-w-xs">
             {activeRepo ? activeRepo.name : "Workspace"}
           </span>
+          {Boolean(activeRepo?.vectorCount && activeRepo.vectorCount > 0) && (
+            <span className="font-code-sm text-[11px] px-2 py-0.5 rounded bg-surface-container border border-outline-variant text-outline">
+              {activeRepo?.vectorCount} vectors
+            </span>
+          )}
         </div>
 
         {/* User Account Info in Top Right Corner */}
@@ -73,7 +82,7 @@ export default function Home() {
         <section className="flex-1 h-full flex flex-col bg-background text-on-surface min-w-0">
           {!activeRepoId ? (
             /* Minimal Empty State */
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center my-auto max-w-lg mx-auto space-y-3">
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center my-auto max-w-lg mx-auto space-y-4">
               <h2 className="font-headline-md text-lg font-semibold text-primary">
                 Select a Repository
               </h2>
@@ -81,6 +90,24 @@ export default function Home() {
                 Choose an ingested codebase from the sidebar or submit a public
                 GitHub URL to begin asking technical questions.
               </p>
+              {isAnyRepoProcessing && (
+                <div className="pt-2">
+                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface-container border border-outline-variant/80 shadow-md">
+                    <span className="relative flex h-2 w-2 shrink-0">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                    </span>
+                    <span className="glowing-text font-code-sm text-xs font-medium">
+                      We are processing your repository, Please have patience.
+                      {ingestionProgress?.processedVectors && ingestionProgress?.totalVectors
+                        ? ` (${ingestionProgress.processedVectors} / ${ingestionProgress.totalVectors} vectors)`
+                        : ingestionProgress?.totalVectors
+                        ? ` (${ingestionProgress.totalVectors} vectors)`
+                        : ''}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             /* Active Workspace Chat Window */

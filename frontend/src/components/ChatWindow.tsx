@@ -13,12 +13,20 @@ export default function ChatWindow() {
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
   const {
+    activeRepoId,
+    repositories,
+    ingestionProgress,
     activeConversationId,
     messages,
     isChatLoading,
     addMessage,
     setChatLoading,
   } = useAppStore();
+
+  const activeRepo = repositories.find((r) => r.id === activeRepoId);
+  const isRepoProcessing =
+    Boolean(ingestionProgress && ingestionProgress.status !== "READY" && ingestionProgress.progress < 100) ||
+    Boolean(activeRepo && activeRepo.status !== "READY" && activeRepo.status !== "FAILED");
 
   // Scroll to bottom as messages arrive
   useEffect(() => {
@@ -271,6 +279,24 @@ export default function ChatWindow() {
 
       {/* Minimal Floating Input Tray */}
       <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-background via-background to-transparent pointer-events-none z-20">
+        {isRepoProcessing && (
+          <div className="max-w-3xl mx-auto mb-3 text-center pointer-events-auto">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface-container/90 border border-outline-variant/80 backdrop-blur-md shadow-lg">
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+              </span>
+              <span className="glowing-text font-code-sm text-xs font-medium">
+                We are processing your repository, Please have patience.
+                {ingestionProgress?.processedVectors && ingestionProgress?.totalVectors
+                  ? ` (${ingestionProgress.processedVectors} / ${ingestionProgress.totalVectors} vectors)`
+                  : ingestionProgress?.totalVectors
+                  ? ` (${ingestionProgress.totalVectors} vectors)`
+                  : ''}
+              </span>
+            </div>
+          </div>
+        )}
         <div className="bg-surface border border-outline-variant rounded-md shadow-sm pointer-events-auto max-w-3xl mx-auto w-full p-2 focus-within:border-primary transition-colors">
           <form
             onSubmit={handleSendMessage}

@@ -211,7 +211,13 @@ export async function generateAndStoreEmbeddings(
     }
 
     try {
-      const payload = { repositoryId, status: "PROCESSING", progress };
+      const payload = {
+        repositoryId,
+        status: "PROCESSING",
+        progress,
+        processedVectors: processedCount,
+        totalVectors: chunks.length,
+      };
       const ioInstance = getIO();
       if (ioInstance) {
         ioInstance.emit("ingestion-progress", payload);

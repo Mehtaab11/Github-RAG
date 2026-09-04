@@ -25,11 +25,12 @@ model User {
 
 // Track the state of GitHub repositories being ingested
 model Repository {
-  id        String     @id @default(uuid())
-  githubUrl String     @unique
-  name      String // e.g., "facebook/react"
-  branch    String     @default("main")
-  status    RepoStatus @default(PENDING) // Tracks the background worker status
+  id          String     @id @default(uuid())
+  githubUrl   String     @unique
+  name        String // e.g., "facebook/react"
+  branch      String     @default("main")
+  status      RepoStatus @default(PENDING) // Tracks the background worker status
+  vectorCount Int?       @default(0) // Total indexed vectors/chunks
 
   userId String? // Optional: if you want to tie repos to the user who added them
   user   User?   @relation(fields: [userId], references: [id])

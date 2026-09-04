@@ -13,6 +13,7 @@ interface Repository {
   name: string;
   githubUrl: string;
   status: "PENDING" | "CLONING" | "PROCESSING" | "READY" | "FAILED";
+  vectorCount?: number;
 }
 
 interface AppState {
@@ -27,6 +28,9 @@ interface AppState {
     status: string;
     progress: number;
     error?: string;
+    processedVectors?: number;
+    totalVectors?: number;
+    vectorCount?: number;
   } | null;
   setRepositories: (repos: Repository[]) => void;
   setActiveRepoId: (id: string | null) => void;
@@ -86,7 +90,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         set((state) => ({
           ingestionProgress: null,
           repositories: state.repositories.map((repo) =>
-            repo.id === targetRepoId ? { ...repo, status: "READY" } : repo,
+            repo.id === targetRepoId
+              ? {
+                  ...repo,
+                  status: "READY",
+                  vectorCount:
+                    data.vectorCount || data.totalVectors || repo.vectorCount,
+                }
+              : repo,
           ),
         }));
       } else {
@@ -96,7 +107,12 @@ export const useAppStore = create<AppState>((set, get) => ({
           set((state) => ({
             repositories: state.repositories.map((repo) =>
               repo.id === targetRepoId
-                ? { ...repo, status: data.status }
+                ? {
+                    ...repo,
+                    status: data.status,
+                    vectorCount:
+                      data.totalVectors || data.vectorCount || repo.vectorCount,
+                  }
                 : repo,
             ),
           }));

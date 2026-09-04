@@ -35,8 +35,13 @@ export function startRepoWorker() {
         return { success: false, reason: "Repository deleted" };
       }
 
-      const emitProgress = (status: string, progress: number, error?: string) => {
-        const payload = { repositoryId, status, progress, error };
+      const emitProgress = (
+        status: string,
+        progress: number,
+        error?: string,
+        vectorCount?: number,
+      ) => {
+        const payload = { repositoryId, status, progress, error, vectorCount, totalVectors: vectorCount };
         try {
           const ioInstance = getIO();
           if (ioInstance) {
@@ -80,12 +85,15 @@ export function startRepoWorker() {
         // 5. Build Vectors and store in Qdrant
         await generateAndStoreEmbeddings(repositoryId, chunks, job);
 
-        // 6. Finalize Postgres State to READY
+        // 6. Finalize Postgres State to READY with vector count
         await prisma.repository.update({
           where: { id: repositoryId },
-          data: { status: "READY" },
+          data: {
+            status: "READY",
+            vectorCount: chunks.length,
+          },
         });
-        emitProgress("READY", 100);
+        emitProgress("READY", 100, undefined, chunks.length);
         await job.updateProgress(100);
       } catch (error: any) {
         console.error(`❌ Ingestion Failure inside Job ${job.id}:`, error);

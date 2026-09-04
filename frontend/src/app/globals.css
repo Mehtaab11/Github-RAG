@@ -91,6 +91,22 @@
     line-height: 14px;
     letter-spacing: 0.05em;
   }
+  .glowing-text {
+    animation: glowing-pulse 2.2s ease-in-out infinite;
+  }
+}
+
+@keyframes glowing-pulse {
+  0%, 100% {
+    color: #fbbf24;
+    text-shadow: 0 0 6px rgba(251, 191, 36, 0.4), 0 0 12px rgba(251, 191, 36, 0.2);
+    opacity: 0.88;
+  }
+  50% {
+    color: #fef08a;
+    text-shadow: 0 0 14px rgba(251, 191, 36, 0.95), 0 0 24px rgba(245, 158, 11, 0.7), 0 0 36px rgba(217, 119, 6, 0.45);
+    opacity: 1;
+  }
 }
 
 body {
